@@ -108,6 +108,7 @@
   .rowlabel .main{font-size:12.5px; font-weight:700; line-height:1.3;}
   .rowlabel .sub{font-size:10px; color:#8a7a5f; font-weight:700; margin-top:2px; letter-spacing:.02em;}
   .rowlabel.rowlabel-inline{width:170px; flex:0 0 170px; flex-direction:row; align-items:center; gap:8px; flex-wrap:wrap;}
+  .rowlabel.rowlabel-inline .main{display:inline-block; width:68px; flex:0 0 68px; text-align:left;}
   .rowlabel.rowlabel-inline .letter{width:66px; height:66px; font-size:36px;}
   .rowfields{
     flex:1; padding:8px; display:flex; flex-wrap:wrap; gap:8px 10px; align-items:center;
@@ -305,11 +306,11 @@
 <div class="wrap">
   <div class="sheet">
 
-    <!-- ライン No. / 品番/品名 / 工程 / 作業者名 -->
+    <!-- 基本情報: ライン No. / 品番/品名 / 工程 / 作業者名 -->
     <div class="sheetrow">
-      <div class="rowlabel"><span class="main" data-i18n="lineNo">ライン No.</span></div>
+      <div class="rowlabel"><span class="main" data-i18n="basicInfo">基本情報</span></div>
       <div class="rowfields">
-        <div class="fieldgroup narrow"><select id="lineNo"></select></div>
+        <div class="fieldgroup narrow"><span class="glabel" data-i18n="lineNo">ライン No.</span><select id="lineNo"></select></div>
         <div class="fieldgroup"><span class="glabel" data-i18n="partNo">品番/品名</span><select id="partNo"></select></div>
         <div class="fieldgroup"><span class="glabel" data-i18n="process">工程</span><select id="process"></select></div>
         <div class="fieldgroup"><span class="glabel" data-i18n="workerName">作業者名</span><select id="workerName"></select></div>
@@ -327,7 +328,7 @@
 
     <!-- 稼働時間 TIME（段取り日報では「段取り時間」としてラベルのみ切り替え） -->
     <div class="sheetrow">
-      <div class="rowlabel"><span class="main" id="workTimeLabel" data-i18n="workTime">稼働時間</span><span class="sub">TIME</span></div>
+      <div class="rowlabel"><span class="main" id="workTimeLabel" data-i18n="workTime">稼働時間</span><span class="sub" id="workTimeSub">TIME</span></div>
       <div class="rowfields">
         <div class="fieldgroup narrow"><span class="glabel" data-i18n="startTime">始業</span><select id="startH"></select></div>
         <div class="fieldgroup narrow" style="margin-top:17px;"><select id="startM"></select></div>
@@ -353,21 +354,13 @@
       </div>
     </div>
 
-    <!-- 段取り担当者名（段取り日報のみ） -->
-    <div class="sheetrow setupOnly">
-      <div class="rowlabel"><span class="main" data-i18n="setupWorker">段取り担当者名</span></div>
-      <div class="rowfields">
-        <div class="fieldgroup fullwidth"><select id="setupName"></select></div>
-      </div>
-    </div>
-
   </div>
-
-  <!-- 機械停止時間 STOP（1行目 → 入力で2行目 → 3行目）：独立したくくり（段取り日報では不要） -->
-  <div class="sheet normalOnly" id="stopRowsContainer"></div>
 
   <!-- CHIP交換時間 STOP（1回 → 入力で2回…5回まで）：独立したくくり（段取り日報では不要） -->
   <div class="sheet normalOnly" id="chipTimeRowContainer"></div>
+
+  <!-- 機械停止時間 STOP（1行目 → 入力で2行目 → 3行目）：独立したくくり（段取り日報では不要） -->
+  <div class="sheet normalOnly" id="stopRowsContainer"></div>
 
   <!-- 加工前の不良 - 加工：独立したくくり（1組目を選択したら2組目・3組目が表示）（段取り日報では不要） -->
   <div class="sheet normalOnly" id="defectKakouContainer"></div>
@@ -507,7 +500,8 @@ const TR = {
   shiftNight:    {ja:"夜勤", id:"Shift Malam", es:"Turno noche", pt:"Turno noite"},
   modeNormal:    {ja:"加工日報", id:"Laporan Proses", es:"Reporte de mecanizado", pt:"Relatório de usinagem"},
   modeSetup:     {ja:"段取り", id:"Setup", es:"Preparación (Setup)", pt:"Preparação (Setup)"},
-  workTimeSetup: {ja:"稼働時間(段取り時間)", id:"Jam Kerja (Waktu Setup)", es:"Horario de trabajo (tiempo de preparación)", pt:"Horário de trabalho (tempo de preparação)"},
+  workTimeSetup: {ja:"稼働時間(段取りをした時間)", id:"Jam Kerja (Waktu Setup)", es:"Horario de trabajo (tiempo de preparación)", pt:"Horário de trabalho (tempo de preparação)"},
+  setupDoneTime: {ja:"(段取りをした時間)", id:"(Waktu Setup)", es:"(Tiempo de preparación)", pt:"(Tempo de preparação)"},
   setupLabelFull:{ja:"段取り不良数", id:"Jumlah Cacat Setup", es:"Cantidad de defectos de preparación", pt:"Quantidade de defeitos de preparação"},
   nextLineBtn:   {ja:"次のラインへ（続けて入力）", id:"Ke line berikutnya (lanjutkan input)", es:"A la siguiente línea (continuar)", pt:"Para a próxima linha (continuar)"},
   confirmTitle:  {ja:"入力内容の確認", id:"Konfirmasi Data", es:"Confirmación de datos", pt:"Confirmação dos dados"},
@@ -524,6 +518,7 @@ const TR = {
                   es:"Esta es una pantalla de demostración para revisar el diseño en tableta. Los datos ingresados no se envían ni se guardan (el botón \"Enviar\" solo muestra una vista previa).",
                   pt:"Esta é uma tela de demonstração para verificar o layout no tablet. Os dados inseridos não são enviados nem salvos (o botão \"Enviar\" apenas exibe uma pré-visualização)."},
   lineNo:        {ja:"ライン No.", id:"No. Line", es:"N.º de línea", pt:"N.º da linha"},
+  basicInfo:     {ja:"基本情報", id:"Informasi Dasar", es:"Información básica", pt:"Informações básicas"},
   partNo:        {ja:"品番/品名", id:"No./Nama Part", es:"N.º/Nombre de pieza", pt:"N.º/Nome da peça"},
   partNoOtherPlaceholder:{ja:"品番/品名を直接入力", id:"Masukkan No./Nama Part", es:"Ingrese N.º/Nombre de pieza", pt:"Digite o N.º/Nome da peça"},
   process:       {ja:"工程", id:"Proses", es:"Proceso", pt:"Processo"},
@@ -538,14 +533,13 @@ const TR = {
   kazuPlaceholder:{ja:"例：120", id:"Contoh: 120", es:"Ej.: 120", pt:"Ex.: 120"},
   toolExchange:  {ja:"刃具交換者名", id:"Nama Penukar Alat Potong", es:"Nombre quien cambió la herramienta", pt:"Nome de quem trocou a ferramenta"},
   chipWorker:    {ja:"CHIP交換担当者名", id:"Nama Penanggung Jawab Ganti CHIP", es:"Responsable de cambio de CHIP", pt:"Responsável pela troca de CHIP"},
-  setupWorker:   {ja:"段取り担当者名", id:"Nama Penanggung Jawab Setup", es:"Responsable de preparación (setup)", pt:"Responsável pela preparação (setup)"},
   machineStop:   {ja:"機械停止時間", id:"Waktu Mesin Berhenti", es:"Tiempo de parada de máquina", pt:"Tempo de parada da máquina"},
   content:       {ja:"内容", id:"Keterangan", es:"Detalle", pt:"Detalhe"},
   contentPlaceholder:{ja:"内容を入力", id:"Masukkan keterangan", es:"Ingrese el detalle", pt:"Digite o detalhe"},
   chipTime:      {ja:"CHIP交換時間", id:"Waktu Ganti CHIP", es:"Tiempo de cambio de CHIP", pt:"Tempo de troca de CHIP"},
   defectBefore:  {ja:"加工前の不良", id:"Cacat Sebelum Proses", es:"Defecto antes del mecanizado", pt:"Defeito antes da usinagem"},
-  defectKakou:   {ja:"加工", id:"Proses (Kakou)", es:"Mecanizado (Kakou)", pt:"Usinagem (Kakou)"},
-  defectSozai:   {ja:"素材", id:"Material (Sozai)", es:"Material (Sozai)", pt:"Material (Sozai)"},
+  defectKakou:   {ja:"加工(KAKOU)", id:"Proses (Kakou)", es:"Mecanizado (Kakou)", pt:"Usinagem (Kakou)"},
+  defectSozai:   {ja:"素材(SOZAI)", id:"Material (Sozai)", es:"Material (Sozai)", pt:"Material (Sozai)"},
   qty:           {ja:"数量", id:"Jumlah", es:"Cantidad", pt:"Quantidade"},
   event:         {ja:"事象", id:"Jenis Cacat", es:"Tipo de defecto", pt:"Tipo de defeito"},
   chipLabel:     {ja:"CHIP", id:"CHIP", es:"CHIP", pt:"CHIP"},
@@ -601,9 +595,12 @@ function applyTranslations(){
 // 段取り日報モード中は、言語切替で上書きされた直後でも
 // 「稼働時間」→「稼働時間(段取り時間)」、「段取り」→「段取り不良数」に差し替える
 function updateDynamicLabels(){
+  const wts = document.getElementById('workTimeSub');
   if(reportMode === 'setup'){
-    const wt = document.getElementById('workTimeLabel'); if(wt) wt.textContent = t('workTimeSetup');
+    if(wts) wts.textContent = t('setupDoneTime');
     const sd = document.getElementById('setupDefectLabel'); if(sd) sd.textContent = t('setupLabelFull');
+  } else {
+    if(wts) wts.textContent = 'TIME';
   }
 }
 function setLang(lang){
@@ -618,12 +615,21 @@ function setReportMode(mode){
   document.querySelectorAll('.mode-toggle button[data-mode]').forEach(b=>{
     b.classList.toggle('active', b.dataset.mode === mode);
   });
+  updateWorkerOptions();
   applyTranslations();
+}
+// 作業者名のプルダウン：段取り日報は浅見・タケ・カツのみ、加工日報は全作業員
+function updateWorkerOptions(){
+  const list = reportMode === 'setup' ? MAIN_WORKERS : WORKERS;
+  const el = document.getElementById('workerName');
+  const prevVal = el ? el.value : null;
+  fillSelect('workerName', list, true);
+  if(el && prevVal && list.includes(prevVal)) el.value = prevVal;
 }
 
 // ---------- 選択肢 ----------
 const WORKERS = ["タケ","カツ","金田","サユリ","タルピ","プトラ","ミカ","ディア","ウィスヌ","ヘリー","フェル","トリヴァ","甲斐","浅見","鈴木","高橋","杉浦"];
-const SETUP_PEOPLE = ["タケ","カツ","浅見"];
+const MAIN_WORKERS = ["浅見","タケ","カツ"];
 const PARTS = ["RD2287B-002(H)","RD2245B-011(R)","RD2364A-001(H)","RD2379B-010(R)","RD4057A-000(R)","RD2364A-011(R)","75130-VA4-0002(D)","13811-ZX2-0001(P)","13811-ZVP-0002(P)","82A-F10(軸受箱)","82A-F10HZ1(軸受箱)","RD2150A-006(H)","RD4029A-011(R)","V61(P)","RD2007A-010(R)","RD2007A-003(H)","RD2150B-000(R)","RD3106A-010(R)","31191-PCX-0000(I)","31191-RL5-A000(I)","31191-RRA-A000(I)","38943-P73-0000(I)","38943-PM3-3002(I)","38943-PR7-A000(I)"];
 const PROCESSES = ["1","2","1 + 2","捨て加工","ブローチ","マシニング","研磨","1 + 2 + マシニング","焼入れ前　1 + 2","焼入れ後　3 + ブローチ","焼入れ後　3","焼入れ後　ブローチ","焼入れ後　3 + 4 + ブローチ","1 + 2 + ブローチ + 研磨"];
 // 加工：事象（共通の用語は翻訳。CHIP欠け由来のバリ/むしれは2026-10のご依頼で名称変更済み）
@@ -833,7 +839,7 @@ function fillDefectKakou(id){
 
 // 基本情報
 fillRange('lineNo', 1, 14, 1, true);
-fillSelect('workerName', WORKERS, true);
+updateWorkerOptions();
 fillSelect('partNo', PARTS, true);
 fillSelect('process', PROCESSES, true);
 
@@ -853,7 +859,6 @@ fillRange('helpTime', 1, 500, 1, true);
 
 // 刃具交換
 fillSelect('chipName', WORKERS, true);
-fillSelect('setupName', SETUP_PEOPLE, true);
 
 // 加工不良・素材不良の各くくり（数量 0〜50、全て「－」可）
 ["qtyChip","qtyDakon","qtyHeight","qtySetup","qtyShutan","qtyPolyV","qtyNaikei","qtyBosubu","qtyImohada"].forEach(id=>{
@@ -1178,7 +1183,7 @@ function buildConfirmScreen(){
   const missingLabels = [];
   let html = '';
 
-  html += `<div class="confirm-section-title">${t('lineNo')} / ${t('partNo')} / ${t('process')} / ${t('workerName')}</div>`;
+  html += `<div class="confirm-section-title">${t('basicInfo')}</div>`;
   const lineNoV = fieldVal('lineNo'); const lineNoMiss = isBlank(lineNoV);
   if(lineNoMiss) missingLabels.push(t('lineNo'));
   html += confirmRow(t('lineNo'), lineNoV, lineNoMiss);
@@ -1219,11 +1224,6 @@ function buildConfirmScreen(){
   }
 
   if(reportMode === 'setup'){
-    html += `<div class="confirm-section-title">${t('setupWorker')}</div>`;
-    const setupNameV = fieldVal('setupName'); const setupNameMiss = isBlank(setupNameV);
-    if(setupNameMiss) missingLabels.push(t('setupWorker'));
-    html += confirmRow(t('setupWorker'), setupNameV, setupNameMiss);
-
     html += `<div class="confirm-section-title">${t('setupLabelFull')}</div>`;
     html += qtyRow(t('setupLabelFull'), 'qtySetup');
 
@@ -1329,7 +1329,6 @@ async function submitDemo(){
       品番品名: document.getElementById('partNo').value,
       工程: document.getElementById('process').value,
       作業者名: document.getElementById('workerName').value,
-      段取り担当者名: document.getElementById('setupName').value,
       稼働時間_段取り時間: `${document.getElementById('startH').value}:${document.getElementById('startM').value} 〜 ${document.getElementById('endH').value}:${document.getElementById('endM').value}`,
       実績: document.getElementById('kazu').value,
       段取り不良数: document.getElementById('qtySetup').value,
