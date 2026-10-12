@@ -125,6 +125,9 @@
     appearance:none; -webkit-appearance:none;
   }
   select:focus, input:focus{outline:none; border-color:var(--accent); box-shadow:0 0 0 3px rgba(232,145,47,.18);}
+  /* 前回の記入内容プレビュー（読み取り専用）：select/inputと同じ見た目の表示用div */
+  .valueDisplay{width:100%; box-sizing:border-box; font-size:15px; padding:9px 8px; border-radius:8px; border:1px solid #cfcfcf; background:#f7f7f5; min-height:38px; color:#333; word-break:break-word;}
+  .valueDisplay.vd-empty{color:#aaa;}
   select.flagged, input.flagged{background:var(--yellow); border-color:#e0c400;}
   .tilde{font-size:18px; font-weight:700; color:var(--sub); padding:0 2px; align-self:flex-end; padding-bottom:9px;}
 
@@ -361,6 +364,14 @@
       </div>
     </div>
 
+    <!-- 前回の記入を確認（作業員本人が、前回自分が送信した内容を見てから訂正できるようにする導線） -->
+    <div class="sheetrow">
+      <div class="rowlabel"><span class="main" data-i18n="lastSubLabel">前回の記入</span></div>
+      <div class="rowfields">
+        <button type="button" class="btn btn-reset" style="flex:0 1 260px; min-height:40px;" onclick="checkLastSubmission()" data-i18n="lastSubBtn">前回の記入を確認</button>
+      </div>
+    </div>
+
     <!-- 応援 OUEN（段取り日報では不要） -->
     <div class="sheetrow normalOnly">
       <div class="rowlabel"><span class="main" data-i18n="ouen">応援</span><span class="sub">OUEN</span></div>
@@ -529,6 +540,22 @@
   </div>
 </div>
 
+<!-- 前回の記入内容（作業員本人の確認用）。入力画面と同じ見た目（.sheet/.sheetrow等）で読み取り専用表示する。 -->
+<div class="modal-bg" id="lastSubModalBg">
+  <div class="modal">
+    <div class="modalStickyHeader">
+      <h3 id="lastSubModalTitle" data-i18n="lastSubModalTitle">前回の記入内容</h3>
+      <button type="button" class="modalCloseX" onclick="closeLastSubModal()" aria-label="閉じる">×</button>
+    </div>
+    <div id="lastSubModalMeta" style="font-size:12px; color:#888; margin-bottom:10px;"></div>
+    <div id="lastSubModalBody"></div>
+    <div class="modalStickyFooter">
+      <button class="close-btn" id="lastSubLoadBtn" onclick="loadLastSubmissionIntoForm()" data-i18n="lastSubLoadBtn" style="background:var(--accent); margin-top:0; display:none;">この内容を読み込んで編集する</button>
+      <button class="close-btn" onclick="closeLastSubModal()" data-i18n="closeBtn" style="background:#888; margin-top:8px;">閉じる</button>
+    </div>
+  </div>
+</div>
+
 
 <div class="modal-bg photo-modal" id="photoModalBg">
   <div class="modal">
@@ -653,6 +680,17 @@ const TR = {
   noPhotoMsg:    {ja:"この項目の参考写真はまだ登録されていません。", id:"Belum ada foto referensi untuk item ini.", es:"Aún no hay foto de referencia para este elemento.", pt:"Ainda não há foto de referência para este item."},
   photoModalRef: {ja:"参考写真", id:"Foto Referensi", es:"Foto de referencia", pt:"Foto de referência"},
   zoomHint: {ja:"タップで拡大/縮小", id:"Ketuk untuk memperbesar/mengecilkan", es:"Toca para ampliar/reducir", pt:"Toque para ampliar/reduzir"},
+  lastSubLabel:  {ja:"前回の記入", id:"Entri Terakhir", es:"Último registro", pt:"Último registro"},
+  lastSubBtn:    {ja:"前回の記入を確認", id:"Lihat entri terakhir", es:"Ver último registro", pt:"Ver último registro"},
+  lastSubModalTitle:{ja:"前回の記入内容", id:"Entri Terakhir Anda", es:"Su último registro", pt:"Seu último registro"},
+  lastSubNeedWorker:{ja:"先に「作業者名」を選んでください。", id:"Pilih dulu nama pekerja.", es:"Primero seleccione el nombre del trabajador.", pt:"Primeiro selecione o nome do trabalhador."},
+  lastSubNoUrl:  {ja:"この画面はデモ表示のため確認できません。", id:"Tidak tersedia di tampilan demo ini.", es:"No disponible en esta vista de demostración.", pt:"Não disponível nesta visualização de demonstração."},
+  lastSubLoading:{ja:"読み込み中…", id:"Memuat…", es:"Cargando…", pt:"Carregando…"},
+  lastSubNone:   {ja:"本日、この作業者名での送信はまだありません。", id:"Belum ada kiriman hari ini untuk pekerja ini.", es:"Aún no hay envíos hoy para este trabajador.", pt:"Ainda não há envios hoje para este trabalhador."},
+  lastSubError:  {ja:"読み込みに失敗しました。通信状況を確認してもう一度お試しください。", id:"Gagal memuat. Periksa koneksi dan coba lagi.", es:"Error al cargar. Verifique la conexión e intente de nuevo.", pt:"Falha ao carregar. Verifique a conexão e tente novamente."},
+  lastSubLoadBtn:{ja:"この内容を読み込んで編集する", id:"Muat dan edit entri ini", es:"Cargar y editar este registro", pt:"Carregar e editar este registro"},
+  lastSubLoadedToast:{ja:"前回の内容を読み込みました。確認して修正してください。", id:"Entri terakhir dimuat. Periksa dan perbaiki.", es:"Último registro cargado. Revise y corrija.", pt:"Último registro carregado. Revise e corrija."},
+  lastSubNoneField:{ja:"（記入なし）", id:"(Tidak diisi)", es:"(Sin datos)", pt:"(Sem dados)"},
 };
 let currentLang = 'ja';
 let reportMode = 'normal'; // 'normal'=加工日報 / 'setup'=段取り日報
@@ -661,6 +699,8 @@ let currentShift = 'day'; // 'day'=昼勤 / 'night'=夜勤
 // 未設定（空文字）の間はデモ表示のみで、実際の送信は行われない。
 const WEBAPP_URL = 'https://script.google.com/macros/s/AKfycbzEDY3uUOuKAoTNp3N9us_nBOwlyVm_B_8OQLvgtcqLwbxp2YdhsOrIyJOIX7UelV-r/exec';
 function t(key){ return (TR[key] && TR[key][currentLang]) || (TR[key] && TR[key].ja) || key; }
+// 「前回の記入を確認」画面で、サーバーから取得した値をそのままinnerHTMLへ差し込む際の簡易エスケープ
+function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 function applyTranslations(){
   document.querySelectorAll('[data-i18n]').forEach(el=>{
     el.textContent = t(el.getAttribute('data-i18n'));
@@ -1525,6 +1565,7 @@ async function submitDemo(){
   try{
     await fetch(WEBAPP_URL, {
       method: 'POST',
+      mode: 'no-cors',
       headers: { 'Content-Type': 'text/plain;charset=utf-8' },
       body: JSON.stringify(data)
     });
@@ -1639,6 +1680,31 @@ function saveDraft(){
   showToast(t('draftSavedToast'));
 }
 // 一時保存していた内容をフォームへ戻す（編集のため）。元の保存データは一覧から取り除く。
+// フォームへ {id:value} のフィールド集合を流し込む共通処理。
+// 一時保存の再編集（editDraft）と、「前回の記入を確認」からの読み込み
+// （loadLastSubmissionIntoForm）の両方で使い回す。
+function loadFieldsIntoForm(mode, shift, fields){
+  setShift(shift);
+  setReportMode(mode); // workerNameの選択肢(全作業員/浅見・タケ・カツ)もここで切り替わる
+  resetForm();
+  const ids = Object.keys(fields);
+  ids.forEach(fid=>{
+    const el = document.getElementById(fid);
+    if(el) el.value = fields[fid];
+  });
+  // 値をまとめて流し込んだあと、各欄のchange/inputイベントを発火させる。
+  // これにより「次の欄を表示する」処理（機械停止時間・CHIP交換時間・加工前の不良）と、
+  // 「記入漏れ防止の黄色表示」（watchPair/watchMutual/watchChipPair）が、実際に手で
+  // 入力したときと同じように自動で再計算される（手で値を書き換えただけでは、これらの
+  // イベントリスナーは発火せず、表示が更新されないため）。
+  ids.forEach(fid=>{
+    const el = document.getElementById(fid);
+    if(!el) return;
+    el.dispatchEvent(new Event('change', {bubbles:true}));
+    el.dispatchEvent(new Event('input', {bubbles:true}));
+  });
+  window.scrollTo(0,0);
+}
 function editDraft(id){
   const drafts = loadDrafts();
   const idx = drafts.findIndex(d=>d.id===id);
@@ -1647,28 +1713,202 @@ function editDraft(id){
   drafts.splice(idx,1);
   saveDraftsList(drafts);
   updateDraftBadge();
-
-  setShift(draft.shift);
-  setReportMode(draft.mode); // workerNameの選択肢(全作業員/浅見・タケ・カツ)もここで切り替わる
-  resetForm();
-  const restoredIds = Object.keys(draft.fields);
-  restoredIds.forEach(fid=>{
-    const el = document.getElementById(fid);
-    if(el) el.value = draft.fields[fid];
-  });
-  // 値をまとめて流し込んだあと、各欄のchange/inputイベントを発火させる。
-  // これにより「次の欄を表示する」処理（機械停止時間・CHIP交換時間・加工前の不良）と、
-  // 「記入漏れ防止の黄色表示」（watchPair/watchMutual/watchChipPair）が、実際に手で
-  // 入力したときと同じように自動で再計算される（手で値を書き換えただけでは、これらの
-  // イベントリスナーは発火せず、表示が更新されないため）。
-  restoredIds.forEach(fid=>{
-    const el = document.getElementById(fid);
-    if(!el) return;
-    el.dispatchEvent(new Event('change', {bubbles:true}));
-    el.dispatchEvent(new Event('input', {bubbles:true}));
-  });
+  loadFieldsIntoForm(draft.mode, draft.shift, draft.fields);
   closeDraftsScreen();
-  window.scrollTo(0,0);
+}
+
+/* =========================================================
+   前回の記入を確認（作業員本人向け）。
+   選んだ作業者名で、本日Apps Script側に送信済みの最新の1件を取得して
+   その場の見た目（.sheet/.sheetrow 等、入力画面と同じCSS）で表示する。
+   「読み込んで編集」を押すと、その内容をフォームへ流し込んで訂正できる。
+   ========================================================= */
+let lastSubRaw = null;
+function checkLastSubmission(){
+  const worker = document.getElementById('workerName').value;
+  if(!worker || worker === '－'){ alert(t('lastSubNeedWorker')); return; }
+  if(!WEBAPP_URL){ alert(t('lastSubNoUrl')); return; }
+  openLastSubModal();
+  document.getElementById('lastSubModalMeta').textContent = t('lastSubLoading');
+  document.getElementById('lastSubModalBody').innerHTML = '';
+  document.getElementById('lastSubLoadBtn').style.display = 'none';
+  lastSubRaw = null;
+  const url = WEBAPP_URL + '?action=myLast&worker=' + encodeURIComponent(worker);
+  fetch(url, { method:'GET' })
+    .then(res=>res.json())
+    .then(json=>{
+      if(!json || !json.found){
+        document.getElementById('lastSubModalMeta').textContent = '';
+        document.getElementById('lastSubModalBody').innerHTML = `<p style="color:#888;padding:24px 0;text-align:center;">${esc(t('lastSubNone'))}</p>`;
+        return;
+      }
+      lastSubRaw = json.data || {};
+      document.getElementById('lastSubModalMeta').textContent =
+        `${json.sentAt || ''}　${lastSubRaw.日報種別 || ''}　${t('lineNo')}: ${lastSubRaw.ライン番号 || ''}`;
+      document.getElementById('lastSubModalBody').innerHTML = renderLastSubPreview(lastSubRaw);
+      document.getElementById('lastSubLoadBtn').style.display = '';
+    })
+    .catch(()=>{
+      document.getElementById('lastSubModalMeta').textContent = '';
+      document.getElementById('lastSubModalBody').innerHTML = `<p style="color:#c23b3b;padding:24px 0;text-align:center;">${esc(t('lastSubError'))}</p>`;
+    });
+}
+function openLastSubModal(){ document.getElementById('lastSubModalBg').classList.add('show'); }
+function closeLastSubModal(){ document.getElementById('lastSubModalBg').classList.remove('show'); }
+// 値が未入力（空・null・"－"）かどうかの判定（表示用）
+function lsBlank(v){ return v===undefined || v===null || v==='' || v==='－'; }
+function lsVal(v){ return `<div class="valueDisplay${lsBlank(v)?' vd-empty':''}">${esc(lsBlank(v)?t('lastSubNoneField'):v)}</div>`; }
+function lsRow(main, sub, fieldsHtml){
+  return `<div class="sheetrow"><div class="rowlabel"><span class="main">${esc(main)}</span>${sub?`<span class="sub">${esc(sub)}</span>`:''}</div><div class="rowfields">${fieldsHtml}</div></div>`;
+}
+function lsField(label, val, narrow){
+  return `<div class="fieldgroup${narrow?' narrow':''}"><span class="glabel">${esc(label)}</span>${lsVal(val)}</div>`;
+}
+// 入力画面（.sheet/.sheetrow/.rowlabel/.rowfields/.fieldgroup）と全く同じ見た目で、
+// 前回送信した内容を読み取り専用表示する。段階的に表示が増える欄（機械停止時間・
+// CHIP交換時間・加工前の不良）は、送信当時に表示されていたところまでを再現する。
+function renderLastSubPreview(d){
+  const isSetup = d.日報種別 === '段取り';
+  let h = `<div class="sheet"><div class="sheetrow"><div class="rowlabel"><span class="main">${esc(t('basicInfo'))}</span></div><div class="rowfields">`
+    + lsField(t('lineNo'), d.ライン番号)
+    + lsField(t('partNo'), d.品番品名)
+    + lsField(t('process'), d.工程)
+    + lsField(t('workerName'), d.作業者名)
+    + `</div></div>`;
+  if(!isSetup){
+    h += lsRow(t('ouen'), 'OUEN', lsField(t('ouenName'), d.応援をした作業員の名前) + lsField(t('ouenTime'), d.応援をした時間分));
+  }
+  if(isSetup){
+    h += lsRow(t('workTime'), t('setupDoneTime'), `<div class="fieldgroup fullwidth">${lsVal(d.稼働時間_段取り時間)}</div>`);
+  } else {
+    h += lsRow(t('workTime'), 'TIME',
+      `<div class="fieldgroup narrow"><span class="glabel">${esc(t('startTime'))}</span>${lsVal(d.稼働開始)}</div>`+
+      `<div class="tilde">～</div>`+
+      `<div class="fieldgroup narrow"><span class="glabel">${esc(t('endTime'))}</span>${lsVal(d.稼働終了)}</div>`
+    );
+  }
+  h += lsRow(t('kazu'), 'KAZU', `<div class="fieldgroup fullwidth">${lsVal(d.実績)}</div>`);
+  if(!isSetup){
+    h += lsRow(t('toolExchange'), 'Name', lsField(t('chipWorker'), d.CHIP交換担当者名));
+  }
+  h += `</div>`;
+
+  if(!isSetup){
+    const chipArr = d.CHIP交換時間 || [];
+    let chipFields = '';
+    for(let i=0;i<5;i++){
+      if(i>0 && lsBlank(chipArr[i-1])) break;
+      chipFields += `<div class="fieldgroup narrow"><span class="glabel">${i+1}${esc(t('timesUnit'))}</span>${lsVal(chipArr[i])}</div>`;
+    }
+    if(chipFields) h += `<div class="sheet">${lsRow(t('chipTime'), 'STOP', chipFields)}</div>`;
+
+    const stopArr = d.機械停止時間 || [];
+    let stopRows = '';
+    for(let i=0;i<3;i++){
+      const s = stopArr[i];
+      if(i>0 && lsBlank(stopArr[i-1] && stopArr[i-1].時間)) break;
+      stopRows += lsRow(t('machineStop'), 'STOP '+(i+1),
+        `<div class="fieldgroup narrow">${lsVal(s && s.時間)}</div>`+
+        `<div class="fieldgroup">${lsVal(s && s.内容)}</div>`
+      );
+    }
+    if(stopRows) h += `<div class="sheet">${stopRows}</div>`;
+
+    const kakouArr = d.不良_加工 || [];
+    let kakouFields = '';
+    for(let i=0;i<3;i++){
+      const it = kakouArr[i];
+      if(i>0 && lsBlank(kakouArr[i-1] && kakouArr[i-1].数量)) break;
+      kakouFields += `<div class="fieldgroup narrow"><span class="glabel">${esc(t('qty'))}</span>${lsVal(it && it.数量)}</div><div class="fieldgroup"><span class="glabel">${esc(t('event'))}</span>${lsVal(it && it.事象)}</div>`;
+    }
+    if(kakouFields) h += `<div class="sheet">${lsRow(t('defectBefore'), t('defectKakou'), kakouFields)}</div>`;
+
+    const sozaiArr = d.不良_素材 || [];
+    let sozaiFields = '';
+    for(let i=0;i<3;i++){
+      const it = sozaiArr[i];
+      if(i>0 && lsBlank(sozaiArr[i-1] && sozaiArr[i-1].数量)) break;
+      sozaiFields += `<div class="fieldgroup narrow"><span class="glabel">${esc(t('qty'))}</span>${lsVal(it && it.数量)}</div><div class="fieldgroup"><span class="glabel">${esc(t('event'))}</span>${lsVal(it && it.事象)}</div>`;
+    }
+    if(sozaiFields) h += `<div class="sheet">${lsRow(t('defectBefore'), t('defectSozai'), sozaiFields)}</div>`;
+
+    const kf = d.加工不良 || {};
+    h += `<div class="sheet"><div class="sheet-title">${esc(t('kakouFuryouTitle'))}</div>`;
+    h += lsRow(t('chipLabel'), '', `<div class="fieldgroup narrow"><span class="glabel">${esc(t('qty'))}</span>${lsVal(kf.CHIP)}</div>`);
+    h += lsRow(t('dakonLabel'), '', `<div class="fieldgroup narrow"><span class="glabel">${esc(t('qty'))}</span>${lsVal(kf.ダコン)}</div>`);
+    h += lsRow(t('heightLabel'), '', `<div class="fieldgroup narrow"><span class="glabel">${esc(t('qty'))}</span>${lsVal(kf.高さ)}</div>`);
+    const others = kf.その他 || [];
+    for(let i=0;i<3;i++){
+      const o = others[i];
+      if(i>0 && lsBlank(others[i-1] && others[i-1].数量)) break;
+      h += lsRow(t('otherLabel'), String(i+1),
+        `<div class="fieldgroup narrow"><span class="glabel">${esc(t('qty'))}</span>${lsVal(o && o.数量)}</div>`+
+        `<div class="fieldgroup"><span class="glabel">${esc(t('content'))}</span>${lsVal(o && o.内容)}</div>`
+      );
+    }
+    h += `</div>`;
+  } else {
+    h += `<div class="sheet"><div class="sheet-title">${esc(t('kakouFuryouTitle'))}</div>`;
+    h += lsRow(t('setupLabelFull'), '', `<div class="fieldgroup narrow"><span class="glabel">${esc(t('qty'))}</span>${lsVal(d.段取り不良数)}</div>`);
+    h += `</div>`;
+  }
+
+  const sz = d.素材不良 || {};
+  const sozaiMeta = [
+    [t('locShutan')+'(A)','A','red'], [t('locPolyV')+'(D)','D','green'], [t('locNaikei')+'(B)','B','blue'],
+    [t('locBosubu')+'(C)','C','darkyellow'], [t('locImohada')+'(E)','E','orange']
+  ];
+  h += `<div class="sheet"><div class="sheet-title">${esc(t('sozaiFuryouTitle'))}</div>`;
+  const rawKeys = ["周端/嵌合(A)","ポリV(D)","内径/座面(B)","ボス部(C)","鋳肌面(E)"];
+  sozaiMeta.forEach(([label,letter,cls],i)=>{
+    h += `<div class="sheetrow"><div class="rowlabel rowlabel-inline"><span class="main">${esc(label.replace(/\([A-E]\)$/,''))}</span><span class="letter ${cls}">${letter}</span></div><div class="rowfields"><div class="fieldgroup narrow"><span class="glabel">${esc(t('qty'))}</span>${lsVal(sz[rawKeys[i]])}</div></div></div>`;
+  });
+  h += `</div>`;
+  return h;
+}
+// 取得済みの前回送信データを、入力フォームへそのまま読み込む。
+function rawPayloadToFields(raw){
+  const mode = raw.日報種別 === '段取り' ? 'setup' : 'normal';
+  const shift = raw.シフト === '夜勤' ? 'night' : 'day';
+  const fields = {};
+  const sv = (id,v)=>{ if(v!==undefined && v!==null) fields[id] = String(v); };
+  sv('lineNo', raw.ライン番号);
+  sv('partNo', raw.品番品名);
+  sv('process', raw.工程);
+  sv('workerName', raw.作業者名);
+  sv('kazu', raw.実績);
+  if(mode === 'setup'){
+    const m = /^(\d{1,2}):(\d{2})\s*[〜~]\s*(\d{1,2}):(\d{2})$/.exec(raw.稼働時間_段取り時間 || '');
+    if(m){ sv('startH', m[1]); sv('startM', m[2]); sv('endH', m[3]); sv('endM', m[4]); }
+    sv('qtySetup', raw.段取り不良数);
+  } else {
+    sv('helpName', raw.応援をした作業員の名前);
+    sv('helpTime', raw.応援をした時間分);
+    const sPart = (raw.稼働開始 || '').split(':'); if(sPart.length===2){ sv('startH', sPart[0]); sv('startM', sPart[1]); }
+    const ePart = (raw.稼働終了 || '').split(':'); if(ePart.length===2){ sv('endH', ePart[0]); sv('endM', ePart[1]); }
+    sv('chipName', raw.CHIP交換担当者名);
+    (raw.機械停止時間 || []).forEach((s,i)=>{ if(!s) return; sv('stopTime'+(i+1), s.時間); sv('stopContent'+(i+1), s.内容); });
+    (raw.CHIP交換時間 || []).forEach((v,i)=>sv('chipTime'+(i+1), v));
+    (raw.不良_加工 || []).forEach((x,i)=>{ if(!x) return; sv('kakouQty'+(i+1), x.数量); sv('kakouKind'+(i+1), x.事象); });
+    (raw.不良_素材 || []).forEach((x,i)=>{ if(!x) return; sv('sozaiQty'+(i+1), x.数量); sv('sozaiKind'+(i+1), x.事象); });
+    const kf = raw.加工不良 || {};
+    sv('qtyChip', kf.CHIP); sv('qtyDakon', kf.ダコン); sv('qtyHeight', kf.高さ);
+    (kf.その他 || []).forEach((x,i)=>{ if(!x) return; sv('otherQty'+(i+1), x.数量); sv('otherContent'+(i+1), x.内容); });
+  }
+  const sz = raw.素材不良 || {};
+  sv('qtyShutan', sz["周端/嵌合(A)"]);
+  sv('qtyPolyV', sz["ポリV(D)"]);
+  sv('qtyNaikei', sz["内径/座面(B)"]);
+  sv('qtyBosubu', sz["ボス部(C)"]);
+  sv('qtyImohada', sz["鋳肌面(E)"]);
+  return { mode, shift, fields };
+}
+function loadLastSubmissionIntoForm(){
+  if(!lastSubRaw) return;
+  const { mode, shift, fields } = rawPayloadToFields(lastSubRaw);
+  closeLastSubModal();
+  loadFieldsIntoForm(mode, shift, fields);
+  showToast(t('lastSubLoadedToast'));
 }
 // 削除確認は window.confirm() を使わず、カード内に直接「本当に削除しますか」の
 // 確認行を表示する方式にしている（タブレットをホーム画面に追加して使う場合、
@@ -1784,8 +2024,9 @@ async function confirmBatchSubmit(){
     const getVal = id => (draft.fields[id] !== undefined ? draft.fields[id] : '');
     const data = buildReportData(getVal, draft.mode, draft.shift);
     try{
-      const res = await fetch(WEBAPP_URL, {
+      await fetch(WEBAPP_URL, {
         method: 'POST',
+        mode: 'no-cors',
         headers: { 'Content-Type': 'text/plain;charset=utf-8' },
         body: JSON.stringify(data)
       });
