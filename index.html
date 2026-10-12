@@ -314,6 +314,7 @@
       <button type="button" data-mode="setup" onclick="setReportMode('setup')" data-i18n="modeSetup">段取り</button>
     </div>
     <button type="button" class="calcToggleBtn" onclick="toggleCalculator()" title="電卓">🧮</button>
+    <button type="button" class="calcToggleBtn" onclick="openLastSubFlow()" data-i18n-title="lastSubBtn" title="前回の記入を確認">📋</button>
   </div>
 </header>
 
@@ -361,14 +362,6 @@
         <div class="fieldgroup"><span class="glabel" data-i18n="partNo">品番/品名</span><select id="partNo"></select></div>
         <div class="fieldgroup"><span class="glabel" data-i18n="process">工程</span><select id="process"></select></div>
         <div class="fieldgroup"><span class="glabel" data-i18n="workerName">作業者名</span><select id="workerName"></select></div>
-      </div>
-    </div>
-
-    <!-- 前回の記入を確認（作業員本人が、前回自分が送信した内容を見てから訂正できるようにする導線） -->
-    <div class="sheetrow">
-      <div class="rowlabel"><span class="main" data-i18n="lastSubLabel">前回の記入</span></div>
-      <div class="rowfields">
-        <button type="button" class="btn btn-reset" style="flex:0 1 260px; min-height:40px;" onclick="checkLastSubmission()" data-i18n="lastSubBtn">前回の記入を確認</button>
       </div>
     </div>
 
@@ -691,6 +684,10 @@ const TR = {
   lastSubLoadBtn:{ja:"この内容を読み込んで編集する", id:"Muat dan edit entri ini", es:"Cargar y editar este registro", pt:"Carregar e editar este registro"},
   lastSubLoadedToast:{ja:"前回の内容を読み込みました。確認して修正してください。", id:"Entri terakhir dimuat. Periksa dan perbaiki.", es:"Último registro cargado. Revise y corrija.", pt:"Último registro carregado. Revise e corrija."},
   lastSubNoneField:{ja:"（記入なし）", id:"(Tidak diisi)", es:"(Sin datos)", pt:"(Sem dados)"},
+  lastSubListCountSuffix:{ja:"件の送信があります。確認したい送信を選んでください。", id:" entri hari ini. Pilih salah satu untuk melihat isinya.", es:" envíos hoy. Seleccione uno para ver el contenido.", pt:" envios hoje. Selecione um para ver o conteúdo."},
+  lastSubBackToListBtn:{ja:"← 一覧に戻る", id:"← Kembali ke daftar", es:"← Volver a la lista", pt:"← Voltar à lista"},
+  lastSubPickWorkerSub:{ja:"作業者名を選んでください。", id:"Pilih nama pekerja.", es:"Seleccione el nombre del trabajador.", pt:"Selecione o nome do trabalhador."},
+  lastSubChangeWorkerBtn:{ja:"← 作業者を選び直す", id:"← Pilih pekerja lain", es:"← Elegir otro trabajador", pt:"← Escolher outro trabalhador"},
 };
 let currentLang = 'ja';
 let reportMode = 'normal'; // 'normal'=加工日報 / 'setup'=段取り日報
@@ -707,6 +704,9 @@ function applyTranslations(){
   });
   document.querySelectorAll('[data-i18n-ph]').forEach(el=>{
     el.setAttribute('placeholder', t(el.getAttribute('data-i18n-ph')));
+  });
+  document.querySelectorAll('[data-i18n-title]').forEach(el=>{
+    el.setAttribute('title', t(el.getAttribute('data-i18n-title')));
   });
   updateDynamicLabels();
   // WEBAPP_URL設定済み（実送信モード）の場合、旧デモ版の案内文・バッジは実態と合わないため非表示にする
@@ -1723,36 +1723,114 @@ function editDraft(id){
    その場の見た目（.sheet/.sheetrow 等、入力画面と同じCSS）で表示する。
    「読み込んで編集」を押すと、その内容をフォームへ流し込んで訂正できる。
    ========================================================= */
-let lastSubRaw = null;
-function checkLastSubmission(){
-  const worker = document.getElementById('workerName').value;
-  if(!worker || worker === '－'){ alert(t('lastSubNeedWorker')); return; }
+let lastSubRaw = null;    // 現在プレビュー表示中の1件（読み込んで編集、で使う）
+let lastSubList = [];     // その作業者名の、本日の送信一覧（新しい順）
+let lastSubWorker = null; // 現在選択中の作業者名（ヘッダーのボタンから開くので、フォームの作業者名欄とは独立）
+// ヘッダーのボタンから呼ばれる入口。フォームの作業者名欄の状態に関わらず、まず作業者を選んでもらう。
+function openLastSubFlow(){
   if(!WEBAPP_URL){ alert(t('lastSubNoUrl')); return; }
   openLastSubModal();
+  showLastSubWorkerPicker();
+}
+// 作業者選択画面（全作業員一覧から選ぶ）
+function showLastSubWorkerPicker(){
+  lastSubRaw = null;
+  lastSubList = [];
+  lastSubWorker = null;
+  document.getElementById('lastSubLoadBtn').style.display = 'none';
+  document.getElementById('lastSubModalMeta').textContent = t('lastSubPickWorkerSub');
+  let h = '<div class="sheet"><div class="sheetrow">'
+    + `<div class="rowlabel"><span class="main">${esc(t('workerName'))}</span></div>`
+    + '<div class="rowfields" style="flex-wrap:wrap; gap:8px;">';
+  WORKERS.forEach(name=>{
+    h += `<button type="button" class="btn btn-reset" style="flex:0 0 auto; min-width:72px;" data-lsworker="${esc(name)}">${esc(name)}</button>`;
+  });
+  h += '</div></div></div>';
+  document.getElementById('lastSubModalBody').innerHTML = h;
+}
+function checkLastSubmission(worker){
+  if(!worker || worker === '－'){ showLastSubWorkerPicker(); return; }
+  if(!WEBAPP_URL){ alert(t('lastSubNoUrl')); return; }
+  lastSubWorker = worker;
   document.getElementById('lastSubModalMeta').textContent = t('lastSubLoading');
   document.getElementById('lastSubModalBody').innerHTML = '';
   document.getElementById('lastSubLoadBtn').style.display = 'none';
   lastSubRaw = null;
+  lastSubList = [];
   const url = WEBAPP_URL + '?action=myLast&worker=' + encodeURIComponent(worker);
   fetch(url, { method:'GET' })
     .then(res=>res.json())
     .then(json=>{
-      if(!json || !json.found){
+      // 新形式（一覧）: {found, list:[{sentAt, line, reportType, data}, ...]}
+      // 旧形式（互換用。Apps Script未更新の場合）: {found, sentAt, data}
+      let list = [];
+      if(json && Array.isArray(json.list)) list = json.list;
+      else if(json && json.found && json.data) list = [{ sentAt: json.sentAt, line: json.data.ライン番号, reportType: json.data.日報種別, data: json.data }];
+
+      if(!json || !list.length){
         document.getElementById('lastSubModalMeta').textContent = '';
-        document.getElementById('lastSubModalBody').innerHTML = `<p style="color:#888;padding:24px 0;text-align:center;">${esc(t('lastSubNone'))}</p>`;
+        document.getElementById('lastSubModalBody').innerHTML =
+          `<button type="button" class="btn btn-reset" style="margin-bottom:10px;" onclick="showLastSubWorkerPicker()">${esc(t('lastSubChangeWorkerBtn'))}</button>`
+          + `<p style="color:#888;padding:24px 0;text-align:center;">${esc(t('lastSubNone'))}</p>`;
         return;
       }
-      lastSubRaw = json.data || {};
-      document.getElementById('lastSubModalMeta').textContent =
-        `${json.sentAt || ''}　${lastSubRaw.日報種別 || ''}　${t('lineNo')}: ${lastSubRaw.ライン番号 || ''}`;
-      document.getElementById('lastSubModalBody').innerHTML = renderLastSubPreview(lastSubRaw);
-      document.getElementById('lastSubLoadBtn').style.display = '';
+      lastSubList = list;
+      if(list.length === 1){ showLastSubDetailAt(0, true); }
+      else { showLastSubListView(); }
     })
     .catch(()=>{
       document.getElementById('lastSubModalMeta').textContent = '';
-      document.getElementById('lastSubModalBody').innerHTML = `<p style="color:#c23b3b;padding:24px 0;text-align:center;">${esc(t('lastSubError'))}</p>`;
+      document.getElementById('lastSubModalBody').innerHTML =
+        `<button type="button" class="btn btn-reset" style="margin-bottom:10px;" onclick="showLastSubWorkerPicker()">${esc(t('lastSubChangeWorkerBtn'))}</button>`
+        + `<p style="color:#c23b3b;padding:24px 0;text-align:center;">${esc(t('lastSubError'))}</p>`;
     });
 }
+// 送信が複数件あるとき、一覧から選べるようにする画面
+function showLastSubListView(){
+  lastSubRaw = null;
+  document.getElementById('lastSubLoadBtn').style.display = 'none';
+  document.getElementById('lastSubModalMeta').textContent =
+    (lastSubList.length) + t('lastSubListCountSuffix');
+  let h = `<button type="button" class="btn btn-reset" style="margin-bottom:10px;" onclick="showLastSubWorkerPicker()">${esc(t('lastSubChangeWorkerBtn'))}</button>`;
+  h += '<div class="sheet">';
+  lastSubList.forEach((item,i)=>{
+    h += `<div class="sheetrow" data-lsidx="${i}" style="cursor:pointer;">`+
+      `<div class="rowlabel"><span class="main">${esc(t('lineNo'))}</span><span class="sub">${esc(item.line!=null?item.line:'－')}</span></div>`+
+      `<div class="rowfields">`+
+      `<div class="fieldgroup"><span class="glabel">${esc(t('submitBtn'))}</span><div class="valueDisplay">${esc(item.sentAt||'')}</div></div>`+
+      `<div class="fieldgroup narrow"><span class="glabel">${esc(t('basicInfo'))}</span><div class="valueDisplay">${esc(item.reportType||'')}</div></div>`+
+      `</div></div>`;
+  });
+  h += '</div>';
+  document.getElementById('lastSubModalBody').innerHTML = h;
+}
+// 一覧から1件選んだとき／該当が1件しかなかったときの詳細表示
+// isOnly: true の場合は「一覧に戻る」ボタンを出さない（そもそも一覧を出す必要がない1件だけのケース）
+function showLastSubDetailAt(idx, isOnly){
+  const item = lastSubList[idx];
+  if(!item) return;
+  lastSubRaw = item.data || {};
+  document.getElementById('lastSubModalMeta').textContent =
+    `${item.sentAt || ''}　${lastSubRaw.日報種別 || ''}　${t('lineNo')}: ${lastSubRaw.ライン番号 || ''}`;
+  let backBtn = '';
+  if(!isOnly && lastSubList.length > 1){
+    backBtn = `<button type="button" class="btn btn-reset" style="margin-bottom:10px;" onclick="showLastSubListView()">${esc(t('lastSubBackToListBtn'))}</button>`;
+  } else {
+    backBtn = `<button type="button" class="btn btn-reset" style="margin-bottom:10px;" onclick="showLastSubWorkerPicker()">${esc(t('lastSubChangeWorkerBtn'))}</button>`;
+  }
+  document.getElementById('lastSubModalBody').innerHTML = backBtn + renderLastSubPreview(lastSubRaw);
+  document.getElementById('lastSubLoadBtn').style.display = '';
+}
+// モーダル内のクリックを拾う（モーダル本体の要素は固定なので、リスナーは1回だけ登録すればよい）
+// ・作業者選択ボタン（data-lsworker）→ その作業者の本日の送信を取得
+// ・送信一覧の行（data-lsidx）→ その送信の詳細を表示
+document.getElementById('lastSubModalBody').addEventListener('click', function(e){
+  const workerBtn = e.target.closest('[data-lsworker]');
+  if(workerBtn){ checkLastSubmission(workerBtn.dataset.lsworker); return; }
+  const row = e.target.closest('[data-lsidx]');
+  if(!row) return;
+  showLastSubDetailAt(+row.dataset.lsidx, false);
+});
 function openLastSubModal(){ document.getElementById('lastSubModalBg').classList.add('show'); }
 function closeLastSubModal(){ document.getElementById('lastSubModalBg').classList.remove('show'); }
 // 値が未入力（空・null・"－"）かどうかの判定（表示用）
