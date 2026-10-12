@@ -1462,8 +1462,18 @@ function buildReportData(getVal, mode, shift){
     };
   }
 }
-// 必須項目（ライン No./品番/品名/工程/作業者名/稼働時間/実績）のうち、未入力のものの
-// ラベル一覧を返す。getVal は buildReportData と同じ使い分け方をする。
+// 指定した項目(fieldId)の値が「入力済み」と言えるかどうかを判定する。
+// プルダウン（select）なら空/－/0は未入力扱い、文字入力欄は空文字のみ未入力扱い
+// （isFieldFilled(el)と同じ判定基準を、要素ではなく値だけから判定できるようにしたもの）。
+function isFilledValue(fieldId, val){
+  const el = document.getElementById(fieldId);
+  if(el && el.tagName === 'SELECT'){ return val !== '' && val !== undefined && val !== '－' && val !== '0'; }
+  return (val === undefined || val === null ? '' : String(val)).trim() !== '';
+}
+// 必須項目（ライン No./品番/品名/工程/作業者名/稼働時間/実績）に加えて、buildConfirmScreen()
+// と同じ「片方だけ入力されている」組み合わせ（応援・CHIP交換・機械停止時間・加工前の不良・
+// その他）もあわせてチェックし、未入力・入力漏れの項目名一覧を返す。
+// getVal は buildReportData と同じ使い分け方をする（フォーム本体 or 一時保存のスナップショット）。
 function getMissingRequiredLabels(getVal, mode){
   const missing = [];
   if(isBlank(getVal('lineNo'))) missing.push(t('lineNo'));
@@ -1475,6 +1485,25 @@ function getMissingRequiredLabels(getVal, mode){
     missing.push(mode === 'setup' ? t('workTimeSetup') : t('workTime'));
   }
   if(isBlank(getVal('kazu'))) missing.push(t('kazu'));
+
+  function pairMissing(label, idA, idB){
+    const aFilled = isFilledValue(idA, getVal(idA));
+    const bFilled = isFilledValue(idB, getVal(idB));
+    if(aFilled !== bFilled) missing.push(label);
+  }
+
+  if(mode !== 'setup'){
+    pairMissing(t('ouen'), 'helpName', 'helpTime');
+
+    const chipNameFilled = isFilledValue('chipName', getVal('chipName'));
+    const chipTimeFilled = [1,2,3,4,5].some(i=>isFilledValue('chipTime'+i, getVal('chipTime'+i)));
+    if(chipNameFilled !== chipTimeFilled) missing.push(t('chipWorker'));
+
+    [1,2,3].forEach(i=>pairMissing(`${t('machineStop')} ${i}`, 'stopTime'+i, 'stopContent'+i));
+    [1,2,3].forEach(i=>pairMissing(`${t('defectKakou')} ${i}`, 'kakouQty'+i, 'kakouKind'+i));
+    [1,2,3].forEach(i=>pairMissing(`${t('defectSozai')} ${i}`, 'sozaiQty'+i, 'sozaiKind'+i));
+    [1,2,3].forEach(i=>pairMissing(`${t('otherLabel')} ${i}`, 'otherQty'+i, 'otherContent'+i));
+  }
   return missing;
 }
 
@@ -1609,31 +1638,6 @@ function saveDraft(){
   document.getElementById('lineNo').focus();
   showToast(t('draftSavedToast'));
 }
-// 段階的に表示が増える行（機械停止時間・CHIP交換時間・加工前の不良）を、
-// 保存されていたスナップショットの内容に合わせて必要な分だけ表示し直す。
-function revealCascadeRowsForSnapshot(fields){
-  for(let i=1;i<3;i++){
-    if(!isBlank(fields['stopTime'+i]) || !isBlank(fields['stopContent'+i])){
-      const el = document.getElementById('stopRow'+(i+1)); if(el) el.classList.remove('hidden-row');
-    }
-  }
-  for(let i=1;i<5;i++){
-    if(!isBlank(fields['chipTime'+i])){
-      const el = document.getElementById('chipTimeGroup'+(i+1)); if(el) el.classList.remove('hidden-row');
-    }
-  }
-  for(let i=1;i<3;i++){
-    if(!isBlank(fields['kakouQty'+i]) || !isBlank(fields['kakouKind'+i])){
-      const el = document.getElementById('defectKakouContainerPair'+(i+1)); if(el) el.classList.remove('hidden-row');
-    }
-    if(!isBlank(fields['sozaiQty'+i]) || !isBlank(fields['sozaiKind'+i])){
-      const el = document.getElementById('defectSozaiContainerPair'+(i+1)); if(el) el.classList.remove('hidden-row');
-    }
-    if(!isBlank(fields['otherQty'+i]) || !isBlank(fields['otherContent'+i])){
-      const el = document.getElementById('otherFuryouRow'+(i+1)); if(el) el.classList.remove('hidden-row');
-    }
-  }
-}
 // 一時保存していた内容をフォームへ戻す（編集のため）。元の保存データは一覧から取り除く。
 function editDraft(id){
   const drafts = loadDrafts();
@@ -1647,11 +1651,22 @@ function editDraft(id){
   setShift(draft.shift);
   setReportMode(draft.mode); // workerNameの選択肢(全作業員/浅見・タケ・カツ)もここで切り替わる
   resetForm();
-  Object.keys(draft.fields).forEach(fid=>{
+  const restoredIds = Object.keys(draft.fields);
+  restoredIds.forEach(fid=>{
     const el = document.getElementById(fid);
     if(el) el.value = draft.fields[fid];
   });
-  revealCascadeRowsForSnapshot(draft.fields);
+  // 値をまとめて流し込んだあと、各欄のchange/inputイベントを発火させる。
+  // これにより「次の欄を表示する」処理（機械停止時間・CHIP交換時間・加工前の不良）と、
+  // 「記入漏れ防止の黄色表示」（watchPair/watchMutual/watchChipPair）が、実際に手で
+  // 入力したときと同じように自動で再計算される（手で値を書き換えただけでは、これらの
+  // イベントリスナーは発火せず、表示が更新されないため）。
+  restoredIds.forEach(fid=>{
+    const el = document.getElementById(fid);
+    if(!el) return;
+    el.dispatchEvent(new Event('change', {bubbles:true}));
+    el.dispatchEvent(new Event('input', {bubbles:true}));
+  });
   closeDraftsScreen();
   window.scrollTo(0,0);
 }
@@ -1764,19 +1779,24 @@ async function confirmBatchSubmit(){
 
   const remaining = [];
   let successCount = 0;
+  let lastError = null;
   for(const draft of drafts){
     const getVal = id => (draft.fields[id] !== undefined ? draft.fields[id] : '');
     const data = buildReportData(getVal, draft.mode, draft.shift);
     try{
-      await fetch(WEBAPP_URL, {
+      const res = await fetch(WEBAPP_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'text/plain;charset=utf-8' },
         body: JSON.stringify(data)
       });
       successCount++;
     }catch(err){
+      lastError = err;
       remaining.push(draft); // 失敗した分は一時保存に残す
     }
+    // 連続で立て続けに送信すると失敗しやすいサーバー側の事情（排他制御）があるため、
+    // 1件ごとに少し間隔を空けてから次を送る。
+    await new Promise(r=>setTimeout(r, 600));
   }
   saveDraftsList(remaining);
   updateDraftBadge();
@@ -1786,7 +1806,7 @@ async function confirmBatchSubmit(){
   if(remaining.length === 0){
     document.getElementById('previewArea').textContent = `${successCount}${t('batchSendDoneMsg')}`;
   } else {
-    document.getElementById('previewArea').textContent = `${successCount}${t('batchSendPartialMsg')}`;
+    document.getElementById('previewArea').textContent = `${successCount}${t('batchSendPartialMsg')}` + (lastError ? `\n(${lastError})` : '');
   }
   document.getElementById('modalBg').classList.add('show');
 }
