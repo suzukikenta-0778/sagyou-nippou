@@ -149,6 +149,8 @@
   }
   .footer-bar .inner{max-width:760px; margin:0 auto; display:flex; gap:10px;}
   .btn{flex:1; border:none; border-radius:12px; padding:14px 10px; font-size:15px; font-weight:700; cursor:pointer;}
+  /* 一時保存ボタンが増えて3つ並ぶため、フッターの文字サイズ・余白を少し詰める */
+  .footer-bar .inner .btn{padding:14px 4px; font-size:13.5px;}
   .btn-submit{background:var(--accent); color:#fff;}
   .btn-reset{background:#eee; color:#555;}
 
@@ -226,6 +228,48 @@
   .photo-modal .noPhoto{font-size:13px; color:#888; padding:24px 0; text-align:center;}
   .photo-modal .photoFamLabel{font-size:11px; font-weight:700; color:#888; margin:10px 0 4px; letter-spacing:.04em;}
   .photo-modal .photoFamLabel:first-child{margin-top:0;}
+  /* 一時保存・まとめ送信（複数ラインを1人で記入する作業員向け） */
+  .draftBanner{
+    position:fixed; left:0; right:0; bottom:64px; z-index:29;
+    display:none; justify-content:center; padding:0 16px;
+  }
+  .draftBanner.show{display:flex;}
+  .draftBanner button{
+    pointer-events:auto; border:none; border-radius:999px; padding:10px 18px;
+    background:#333; color:#fff; font-size:13px; font-weight:700; box-shadow:0 2px 10px rgba(0,0,0,.25);
+    cursor:pointer; display:flex; align-items:center; gap:6px;
+  }
+  .draftBanner .draftCount{
+    background:var(--accent); color:#fff; border-radius:999px; min-width:20px; height:20px;
+    display:inline-flex; align-items:center; justify-content:center; font-size:11px; padding:0 5px;
+  }
+  .draftCard{
+    background:#fff; border:1px solid var(--line); border-radius:12px; padding:12px 14px; margin-bottom:12px;
+  }
+  .draftCard .draftCardHead{display:flex; justify-content:space-between; align-items:flex-start; gap:8px; margin-bottom:6px;}
+  .draftCard .draftCardTitle{font-weight:800; font-size:15px; color:#222;}
+  .draftCard .draftCardTime{font-size:11px; color:#999; margin-top:2px;}
+  .draftCard .draftCardSummary{font-size:13px; color:#555; line-height:1.6; margin-bottom:8px;}
+  .draftCard .draftCardBtns{display:flex; gap:8px;}
+  .draftCard .draftCardBtns button{
+    flex:1; border:none; border-radius:8px; padding:9px 8px; font-size:13px; font-weight:700; cursor:pointer;
+  }
+  .draftCard .draftEditBtn{background:var(--panel-bg); color:#333;}
+  .draftCard .draftDeleteBtn{background:#f5e6e6; color:#a33;}
+  .draftDeleteConfirm{background:#fff3f3; border:1px solid #f0b7b7; border-radius:10px; padding:10px 12px; margin-top:4px;}
+  .draftDeleteConfirmMsg{font-size:12.5px; color:#a33; margin-bottom:8px; line-height:1.5;}
+  .draftDeleteConfirmBtn{flex:1; border:none; border-radius:8px; padding:9px 8px; font-size:13px; font-weight:700; cursor:pointer; background:#c23b3b; color:#fff;}
+  .draftCard.missing{border-color:#e8a0a0; background:#fff8f8;}
+  .draftCard .draftMissingNote{font-size:12px; color:#d33333; margin-bottom:8px;}
+  .draftsEmpty{color:#888; font-size:14px; text-align:center; padding:40px 0;}
+  .toast{
+    position:fixed; left:50%; bottom:90px; transform:translateX(-50%); z-index:60;
+    background:rgba(30,30,30,.92); color:#fff; font-size:13px; font-weight:700;
+    padding:10px 18px; border-radius:999px; opacity:0; pointer-events:none; transition:opacity .25s ease;
+    white-space:nowrap;
+  }
+  .toast.show{opacity:1;}
+
   /* スクロールしても常に見える位置に閉じるボタンを固定（最下部までスクロールしなくても戻れるように） */
   .modalStickyHeader{
     position:sticky; top:-18px; margin:-18px -18px 10px; padding:14px 18px;
@@ -442,7 +486,31 @@
 <div class="footer-bar">
   <div class="inner">
     <button class="btn btn-reset" onclick="resetForm()" data-i18n="clearBtn">クリア</button>
+    <button class="btn btn-reset" onclick="saveDraft()" data-i18n="saveDraftBtn">一時保存</button>
     <button class="btn btn-submit" onclick="openConfirmScreen()" data-i18n="submitBtn">送信（デモ）</button>
+  </div>
+</div>
+
+<!-- 複数ラインをまとめて入力する作業員向け：一時保存中の件数バナー（1件以上あるときだけ表示） -->
+<div class="draftBanner" id="draftBanner">
+  <button type="button" onclick="openDraftsScreen()">
+    📋 <span data-i18n="draftsBannerLabel">一時保存の一覧へ</span>　<span class="draftCount" id="draftCountBadge">0</span>
+  </button>
+</div>
+
+<div class="toast" id="toastMsg"></div>
+
+<!-- 一時保存の一覧・まとめて送信 -->
+<div class="confirm-screen" id="draftsScreen">
+  <div class="confirm-header">
+    <h2 data-i18n="draftsScreenTitle">一時保存の一覧</h2>
+    <div class="confirm-sub" data-i18n="draftsScreenSub">内容を確認してから、まとめて送信してください</div>
+  </div>
+  <div id="draftsWarning"></div>
+  <div class="confirm-body" id="draftsBody"></div>
+  <div class="confirm-footer">
+    <button class="btn-reset" onclick="closeDraftsScreen()" data-i18n="backToEditBtn">修正する</button>
+    <button class="btn-submit" id="batchSendBtn" onclick="confirmBatchSubmit()" data-i18n="batchSendBtn">まとめて送信する</button>
   </div>
 </div>
 
@@ -556,6 +624,23 @@ const TR = {
   sozaiFuryouTitle:{ja:"素材不良", id:"Cacat Material (Sozai Furyou)", es:"Defecto de material", pt:"Defeito de material"},
   clearBtn:      {ja:"クリア", id:"Hapus", es:"Borrar", pt:"Limpar"},
   submitBtn:     {ja:"送信", id:"Kirim", es:"Enviar", pt:"Enviar"},
+  saveDraftBtn:  {ja:"一時保存", id:"Simpan Sementara", es:"Guardar borrador", pt:"Salvar rascunho"},
+  draftSavedToast:{ja:"一時保存しました", id:"Tersimpan sementara", es:"Guardado como borrador", pt:"Rascunho salvo"},
+  draftDeletedToast:{ja:"削除しました", id:"Dihapus", es:"Eliminado", pt:"Excluído"},
+  draftsBannerLabel:{ja:"一時保存の一覧へ", id:"Lihat daftar simpanan sementara", es:"Ver borradores guardados", pt:"Ver rascunhos salvos"},
+  draftsScreenTitle:{ja:"一時保存の一覧", id:"Daftar Simpanan Sementara", es:"Borradores guardados", pt:"Rascunhos salvos"},
+  draftsScreenSub:{ja:"内容を確認してから、まとめて送信してください", id:"Periksa isinya, lalu kirim sekaligus", es:"Revise el contenido y envíe todo junto", pt:"Verifique o conteúdo e envie tudo de uma vez"},
+  batchSendBtn:  {ja:"まとめて送信する", id:"Kirim Semua Sekaligus", es:"Enviar todo junto", pt:"Enviar tudo de uma vez"},
+  editBtn:       {ja:"編集", id:"Edit", es:"Editar", pt:"Editar"},
+  deleteBtn:     {ja:"削除", id:"Hapus", es:"Eliminar", pt:"Excluir"},
+  cancelBtn:     {ja:"キャンセル", id:"Batal", es:"Cancelar", pt:"Cancelar"},
+  draftsEmptyMsg:{ja:"一時保存されているデータはありません", id:"Tidak ada data yang disimpan sementara", es:"No hay borradores guardados", pt:"Nenhum rascunho salvo"},
+  draftMissingNote:{ja:"⚠ 未入力の必須項目があります（編集して確認してください）", id:"Ada kolom wajib yang belum diisi (silakan edit)", es:"Faltan campos obligatorios (edítelo para revisar)", pt:"Há campos obrigatórios não preenchidos (edite para revisar)"},
+  draftsAllOkMsg:{ja:"✓ すべて送信できる状態です", id:"✓ Semua siap dikirim", es:"✓ Todo listo para enviar", pt:"✓ Tudo pronto para enviar"},
+  deleteDraftConfirm:{ja:"この一時保存データを削除します。よろしいですか？", id:"Hapus data simpanan sementara ini?", es:"¿Eliminar este borrador guardado?", pt:"Excluir este rascunho salvo?"},
+  batchSendingMsg:{ja:"送信中です。しばらくお待ちください…", id:"Sedang mengirim. Mohon tunggu…", es:"Enviando. Espere un momento…", pt:"Enviando. Aguarde um momento…"},
+  batchSendDoneMsg:{ja:"件を送信しました。スプレッドシートに反映されています。", id:"data berhasil dikirim.", es:"elementos enviados correctamente.", pt:"itens enviados com sucesso."},
+  batchSendPartialMsg:{ja:"件のみ送信できました。残りは一時保存に残っていますので、通信状況を確認してもう一度お試しください。", id:"data berhasil dikirim, sisanya gagal dan tetap tersimpan sementara. Periksa koneksi dan coba lagi.", es:"elementos enviados; el resto falló y sigue guardado. Verifique la conexión e intente de nuevo.", pt:"itens enviados; o restante falhou e continua salvo. Verifique a conexão e tente novamente."},
   sendSuccessMsg:{ja:"送信しました。スプレッドシートに反映されています。", id:"Terkirim. Sudah tercermin di spreadsheet.", es:"Enviado. Reflejado en la hoja de cálculo.", pt:"Enviado. Refletido na planilha."},
   sendErrorMsg:  {ja:"送信に失敗しました。通信状況を確認し、もう一度お試しください。", id:"Gagal mengirim. Periksa koneksi dan coba lagi.", es:"Error al enviar. Verifique la conexión e intente de nuevo.", pt:"Falha ao enviar. Verifique a conexão e tente novamente."},
   previewTitle:  {ja:"入力内容プレビュー", id:"Pratinjau Data", es:"Vista previa de datos", pt:"Pré-visualização dos dados"},
@@ -1318,61 +1403,84 @@ function confirmAndSubmit(){
 
 // 送信: WEBAPP_URL が設定されていれば実際にApps Script(doPost)へ送信、
 // 未設定ならこれまで通りプレビュー表示のみ（デモ動作）。
-async function submitDemo(){
-  let data;
-  if(reportMode === 'setup'){
+// フォーム項目からAPI送信用のデータを組み立てる。
+// getVal(id) は、現在のフォームそのもの（document.getElementById(id).value）からでも、
+// 一時保存しておいたスナップショット（draft.fields[id]）からでも使えるようにしてある
+// （これにより、単発送信・一時保存からのまとめて送信の両方で同じ組み立てロジックを使い回せる）。
+function buildReportData(getVal, mode, shift){
+  if(mode === 'setup'){
     // 段取り日報：ライン番号・品番/品名・工程・作業者名・稼働時間(段取り時間)・実績・段取り不良数・素材不良のみ
-    data = {
+    return {
       日報種別: '段取り',
-      シフト: currentShift === 'night' ? '夜勤' : '昼勤',
-      ライン番号: document.getElementById('lineNo').value,
-      品番品名: document.getElementById('partNo').value,
-      工程: document.getElementById('process').value,
-      作業者名: document.getElementById('workerName').value,
-      稼働時間_段取り時間: `${document.getElementById('startH').value}:${document.getElementById('startM').value} 〜 ${document.getElementById('endH').value}:${document.getElementById('endM').value}`,
-      実績: document.getElementById('kazu').value,
-      段取り不良数: document.getElementById('qtySetup').value,
+      シフト: shift === 'night' ? '夜勤' : '昼勤',
+      ライン番号: getVal('lineNo'),
+      品番品名: getVal('partNo'),
+      工程: getVal('process'),
+      作業者名: getVal('workerName'),
+      稼働時間_段取り時間: `${getVal('startH')}:${getVal('startM')} 〜 ${getVal('endH')}:${getVal('endM')}`,
+      実績: getVal('kazu'),
+      段取り不良数: getVal('qtySetup'),
       素材不良: {
-        "周端/嵌合(A)": document.getElementById('qtyShutan').value,
-        "ポリV(D)": document.getElementById('qtyPolyV').value,
-        "内径/座面(B)": document.getElementById('qtyNaikei').value,
-        "ボス部(C)": document.getElementById('qtyBosubu').value,
-        "鋳肌面(E)": document.getElementById('qtyImohada').value
+        "周端/嵌合(A)": getVal('qtyShutan'),
+        "ポリV(D)": getVal('qtyPolyV'),
+        "内径/座面(B)": getVal('qtyNaikei'),
+        "ボス部(C)": getVal('qtyBosubu'),
+        "鋳肌面(E)": getVal('qtyImohada')
       }
     };
   } else {
-    data = {
+    return {
       日報種別: '加工',
-      シフト: currentShift === 'night' ? '夜勤' : '昼勤',
-      ライン番号: document.getElementById('lineNo').value,
-      品番品名: document.getElementById('partNo').value,
-      工程: document.getElementById('process').value,
-      作業者名: document.getElementById('workerName').value,
-      応援をした作業員の名前: document.getElementById('helpName').value,
-      応援をした時間分: document.getElementById('helpTime').value,
-      稼働開始: `${document.getElementById('startH').value}:${document.getElementById('startM').value}`,
-      稼働終了: `${document.getElementById('endH').value}:${document.getElementById('endM').value}`,
-      実績: document.getElementById('kazu').value,
-      CHIP交換担当者名: document.getElementById('chipName').value,
-      機械停止時間: [1,2,3].map(i=>({時間:document.getElementById('stopTime'+i).value, 内容:document.getElementById('stopContent'+i).value})),
-      CHIP交換時間: [1,2,3,4,5].map(i=>document.getElementById('chipTime'+i).value),
-      不良_加工: [1,2,3].map(i=>({数量:document.getElementById('kakouQty'+i).value, 事象:document.getElementById('kakouKind'+i).value})),
-      不良_素材: [1,2,3].map(i=>({数量:document.getElementById('sozaiQty'+i).value, 事象:document.getElementById('sozaiKind'+i).value})),
+      シフト: shift === 'night' ? '夜勤' : '昼勤',
+      ライン番号: getVal('lineNo'),
+      品番品名: getVal('partNo'),
+      工程: getVal('process'),
+      作業者名: getVal('workerName'),
+      応援をした作業員の名前: getVal('helpName'),
+      応援をした時間分: getVal('helpTime'),
+      稼働開始: `${getVal('startH')}:${getVal('startM')}`,
+      稼働終了: `${getVal('endH')}:${getVal('endM')}`,
+      実績: getVal('kazu'),
+      CHIP交換担当者名: getVal('chipName'),
+      機械停止時間: [1,2,3].map(i=>({時間:getVal('stopTime'+i), 内容:getVal('stopContent'+i)})),
+      CHIP交換時間: [1,2,3,4,5].map(i=>getVal('chipTime'+i)),
+      不良_加工: [1,2,3].map(i=>({数量:getVal('kakouQty'+i), 事象:getVal('kakouKind'+i)})),
+      不良_素材: [1,2,3].map(i=>({数量:getVal('sozaiQty'+i), 事象:getVal('sozaiKind'+i)})),
       加工不良: {
-        CHIP: document.getElementById('qtyChip').value,
-        ダコン: document.getElementById('qtyDakon').value,
-        高さ: document.getElementById('qtyHeight').value,
-        その他: [1,2,3].map(i=>({数量:document.getElementById('otherQty'+i).value, 内容:document.getElementById('otherContent'+i).value}))
+        CHIP: getVal('qtyChip'),
+        ダコン: getVal('qtyDakon'),
+        高さ: getVal('qtyHeight'),
+        その他: [1,2,3].map(i=>({数量:getVal('otherQty'+i), 内容:getVal('otherContent'+i)}))
       },
       素材不良: {
-        "周端/嵌合(A)": document.getElementById('qtyShutan').value,
-        "ポリV(D)": document.getElementById('qtyPolyV').value,
-        "内径/座面(B)": document.getElementById('qtyNaikei').value,
-        "ボス部(C)": document.getElementById('qtyBosubu').value,
-        "鋳肌面(E)": document.getElementById('qtyImohada').value
+        "周端/嵌合(A)": getVal('qtyShutan'),
+        "ポリV(D)": getVal('qtyPolyV'),
+        "内径/座面(B)": getVal('qtyNaikei'),
+        "ボス部(C)": getVal('qtyBosubu'),
+        "鋳肌面(E)": getVal('qtyImohada')
       }
     };
   }
+}
+// 必須項目（ライン No./品番/品名/工程/作業者名/稼働時間/実績）のうち、未入力のものの
+// ラベル一覧を返す。getVal は buildReportData と同じ使い分け方をする。
+function getMissingRequiredLabels(getVal, mode){
+  const missing = [];
+  if(isBlank(getVal('lineNo'))) missing.push(t('lineNo'));
+  if(isBlank(getVal('partNo'))) missing.push(t('partNo'));
+  if(isBlank(getVal('process'))) missing.push(t('process'));
+  if(isBlank(getVal('workerName'))) missing.push(t('workerName'));
+  const sh=getVal('startH'), sm=getVal('startM'), eh=getVal('endH'), em=getVal('endM');
+  if(isBlank(sh)||isBlank(sm)||isBlank(eh)||isBlank(em)){
+    missing.push(mode === 'setup' ? t('workTimeSetup') : t('workTime'));
+  }
+  if(isBlank(getVal('kazu'))) missing.push(t('kazu'));
+  return missing;
+}
+
+async function submitDemo(){
+  const getVal = id => fieldVal(id);
+  const data = buildReportData(getVal, reportMode, currentShift);
 
   if(!WEBAPP_URL){
     // 送信先が未設定の間はデモ表示のみ
@@ -1434,6 +1542,256 @@ function continueNextLine(){
   document.getElementById('lineNo').focus();
 }
 
+/* =========================================================
+   一時保存・まとめて送信（複数ラインを1人の作業員が記入する場合の負担軽減）。
+   保存先はこのタブレットのブラウザ内（localStorage）のみ。他の端末やブラウザの
+   データ消去では引き継がれない。必須項目のチェックは一時保存時には行わず、
+   まとめて送信する直前にまとめてチェックする。
+   ========================================================= */
+const DRAFTS_KEY = 'sagyouNippouDrafts_v1';
+function loadDrafts(){
+  try{
+    const raw = localStorage.getItem(DRAFTS_KEY);
+    return raw ? JSON.parse(raw) : [];
+  }catch(e){ return []; }
+}
+function saveDraftsList(drafts){
+  try{ localStorage.setItem(DRAFTS_KEY, JSON.stringify(drafts)); }catch(e){ /* 保存できなくても画面動作は継続 */ }
+}
+// フォーム内の全項目（select・text・number）を {id: value} の形でまるごと保存する。
+// ヘッダー内の言語選択(langSelect)は対象外にするため、.wrap の中だけを対象にする。
+function collectFormSnapshot(){
+  const snap = {};
+  document.querySelectorAll('.wrap select[id], .wrap input[type="text"][id], .wrap input[type="number"][id]').forEach(el=>{
+    snap[el.id] = el.value;
+  });
+  return snap;
+}
+function showToast(msg){
+  const el = document.getElementById('toastMsg');
+  if(!el) return;
+  el.textContent = msg;
+  el.classList.add('show');
+  clearTimeout(showToast._t);
+  showToast._t = setTimeout(()=>el.classList.remove('show'), 2200);
+}
+function updateDraftBadge(){
+  const drafts = loadDrafts();
+  const banner = document.getElementById('draftBanner');
+  const badge = document.getElementById('draftCountBadge');
+  if(badge) badge.textContent = String(drafts.length);
+  if(banner) banner.classList.toggle('show', drafts.length > 0);
+}
+// 一時保存：今の入力内容をまるごと保存し、作業者名・シフト・稼働時間はそのまま残して
+// 次のラインを続けて入力できるようフォームをリセットする（必須項目チェックは行わない）。
+function saveDraft(){
+  const draft = {
+    id: 'd' + Date.now() + Math.random().toString(36).slice(2,7),
+    savedAt: new Date().toISOString(),
+    mode: reportMode,
+    shift: currentShift,
+    fields: collectFormSnapshot()
+  };
+  const drafts = loadDrafts();
+  drafts.push(draft);
+  saveDraftsList(drafts);
+  updateDraftBadge();
+
+  const keepWorker = fieldVal('workerName');
+  const keepStartH = fieldVal('startH'), keepStartM = fieldVal('startM');
+  const keepEndH = fieldVal('endH'), keepEndM = fieldVal('endM');
+  resetForm();
+  document.getElementById('workerName').value = keepWorker;
+  document.getElementById('startH').value = keepStartH;
+  document.getElementById('startM').value = keepStartM;
+  document.getElementById('endH').value = keepEndH;
+  document.getElementById('endM').value = keepEndM;
+  document.getElementById('lineNo').focus();
+  showToast(t('draftSavedToast'));
+}
+// 段階的に表示が増える行（機械停止時間・CHIP交換時間・加工前の不良）を、
+// 保存されていたスナップショットの内容に合わせて必要な分だけ表示し直す。
+function revealCascadeRowsForSnapshot(fields){
+  for(let i=1;i<3;i++){
+    if(!isBlank(fields['stopTime'+i]) || !isBlank(fields['stopContent'+i])){
+      const el = document.getElementById('stopRow'+(i+1)); if(el) el.classList.remove('hidden-row');
+    }
+  }
+  for(let i=1;i<5;i++){
+    if(!isBlank(fields['chipTime'+i])){
+      const el = document.getElementById('chipTimeGroup'+(i+1)); if(el) el.classList.remove('hidden-row');
+    }
+  }
+  for(let i=1;i<3;i++){
+    if(!isBlank(fields['kakouQty'+i]) || !isBlank(fields['kakouKind'+i])){
+      const el = document.getElementById('defectKakouContainerPair'+(i+1)); if(el) el.classList.remove('hidden-row');
+    }
+    if(!isBlank(fields['sozaiQty'+i]) || !isBlank(fields['sozaiKind'+i])){
+      const el = document.getElementById('defectSozaiContainerPair'+(i+1)); if(el) el.classList.remove('hidden-row');
+    }
+    if(!isBlank(fields['otherQty'+i]) || !isBlank(fields['otherContent'+i])){
+      const el = document.getElementById('otherFuryouRow'+(i+1)); if(el) el.classList.remove('hidden-row');
+    }
+  }
+}
+// 一時保存していた内容をフォームへ戻す（編集のため）。元の保存データは一覧から取り除く。
+function editDraft(id){
+  const drafts = loadDrafts();
+  const idx = drafts.findIndex(d=>d.id===id);
+  if(idx === -1) return;
+  const draft = drafts[idx];
+  drafts.splice(idx,1);
+  saveDraftsList(drafts);
+  updateDraftBadge();
+
+  setShift(draft.shift);
+  setReportMode(draft.mode); // workerNameの選択肢(全作業員/浅見・タケ・カツ)もここで切り替わる
+  resetForm();
+  Object.keys(draft.fields).forEach(fid=>{
+    const el = document.getElementById(fid);
+    if(el) el.value = draft.fields[fid];
+  });
+  revealCascadeRowsForSnapshot(draft.fields);
+  closeDraftsScreen();
+  window.scrollTo(0,0);
+}
+// 削除確認は window.confirm() を使わず、カード内に直接「本当に削除しますか」の
+// 確認行を表示する方式にしている（タブレットをホーム画面に追加して使う場合、
+// ブラウザによってはconfirm()のダイアログが出ずに反応しないことがあるため）。
+let pendingDeleteId = null;
+function askDeleteDraft(id){
+  pendingDeleteId = id;
+  renderDraftsScreen();
+}
+function cancelDeleteDraft(){
+  pendingDeleteId = null;
+  renderDraftsScreen();
+}
+function doDeleteDraft(id){
+  const drafts = loadDrafts().filter(d=>d.id!==id);
+  saveDraftsList(drafts);
+  pendingDeleteId = null;
+  updateDraftBadge();
+  renderDraftsScreen();
+  showToast(t('draftDeletedToast'));
+}
+function draftSummaryLine(draft){
+  const g = id => draft.fields[id];
+  const modeLabel = draft.mode === 'setup' ? t('modeSetup') : t('modeNormal');
+  const shiftLabel = draft.shift === 'night' ? t('shiftNight') : t('shiftDay');
+  return `${modeLabel}　${shiftLabel}　${t('partNo')}: ${isBlank(g('partNo'))?'－':g('partNo')}　${t('process')}: ${isBlank(g('process'))?'－':g('process')}　${t('workerName')}: ${isBlank(g('workerName'))?'－':g('workerName')}`;
+}
+function renderDraftsScreen(){
+  const drafts = loadDrafts();
+  const body = document.getElementById('draftsBody');
+  const warningEl = document.getElementById('draftsWarning');
+  const sendBtn = document.getElementById('batchSendBtn');
+
+  if(drafts.length === 0){
+    body.innerHTML = `<div class="draftsEmpty">${t('draftsEmptyMsg')}</div>`;
+    warningEl.innerHTML = '';
+    if(sendBtn) sendBtn.disabled = true;
+    return;
+  }
+
+  let anyMissing = false;
+  let html = '';
+  drafts.forEach(draft=>{
+    const getVal = id => (draft.fields[id] !== undefined ? draft.fields[id] : '');
+    const missing = getMissingRequiredLabels(getVal, draft.mode);
+    if(missing.length > 0) anyMissing = true;
+    const savedTime = new Date(draft.savedAt).toLocaleString(currentLang === 'ja' ? 'ja-JP' : undefined);
+    html += `<div class="draftCard${missing.length>0?' missing':''}">
+      <div class="draftCardHead">
+        <div>
+          <div class="draftCardTitle">${t('lineNo')}: ${isBlank(getVal('lineNo'))?'－':getVal('lineNo')}</div>
+          <div class="draftCardTime">${savedTime}</div>
+        </div>
+      </div>
+      <div class="draftCardSummary">${draftSummaryLine(draft)}</div>
+      ${missing.length>0 ? `<div class="draftMissingNote">${t('draftMissingNote')}：${missing.join('　/　')}</div>` : ''}
+      ${pendingDeleteId === draft.id ? `
+      <div class="draftDeleteConfirm">
+        <div class="draftDeleteConfirmMsg">${t('deleteDraftConfirm')}</div>
+        <div class="draftCardBtns">
+          <button type="button" class="draftEditBtn" onclick="cancelDeleteDraft()">${t('cancelBtn')}</button>
+          <button type="button" class="draftDeleteConfirmBtn" onclick="doDeleteDraft('${draft.id}')">${t('deleteBtn')}</button>
+        </div>
+      </div>` : `
+      <div class="draftCardBtns">
+        <button type="button" class="draftEditBtn" onclick="editDraft('${draft.id}')">${t('editBtn')}</button>
+        <button type="button" class="draftDeleteBtn" onclick="askDeleteDraft('${draft.id}')">${t('deleteBtn')}</button>
+      </div>`}
+    </div>`;
+  });
+  body.innerHTML = html;
+
+  if(anyMissing){
+    warningEl.innerHTML = `<div class="confirm-warning"><div class="wtitle">${t('confirmMissingTitle')}</div>${t('draftMissingNote')}</div>`;
+    if(sendBtn) sendBtn.disabled = true;
+  } else {
+    warningEl.innerHTML = `<div class="confirm-ok">${t('draftsAllOkMsg')}</div>`;
+    if(sendBtn) sendBtn.disabled = false;
+  }
+}
+function openDraftsScreen(){
+  renderDraftsScreen();
+  document.getElementById('draftsScreen').classList.add('show');
+  window.scrollTo(0,0);
+}
+function closeDraftsScreen(){
+  document.getElementById('draftsScreen').classList.remove('show');
+}
+// まとめて送信：保存済みの一時保存データを、1件ずつ順番にAPIへ送信する。
+// 送信できたものだけ一覧から取り除き、途中で失敗した分は一時保存のまま残す
+// （通信が不安定な場合でも、入力し直しにならないようにするため）。
+async function confirmBatchSubmit(){
+  if(document.getElementById('batchSendBtn').disabled) return;
+  let drafts = loadDrafts();
+  if(drafts.length === 0) return;
+
+  if(!WEBAPP_URL){
+    // 送信先が未設定の間はデモ表示のみ（通常運用では到達しない想定）
+    const all = drafts.map(d=>buildReportData(id=>(d.fields[id]!==undefined?d.fields[id]:''), d.mode, d.shift));
+    document.getElementById('previewArea').textContent = JSON.stringify(all, null, 2);
+    document.getElementById('modalBg').classList.add('show');
+    return;
+  }
+
+  const sendBtn = document.getElementById('batchSendBtn');
+  sendBtn.disabled = true;
+  sendBtn.textContent = t('batchSendingMsg');
+
+  const remaining = [];
+  let successCount = 0;
+  for(const draft of drafts){
+    const getVal = id => (draft.fields[id] !== undefined ? draft.fields[id] : '');
+    const data = buildReportData(getVal, draft.mode, draft.shift);
+    try{
+      await fetch(WEBAPP_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify(data)
+      });
+      successCount++;
+    }catch(err){
+      remaining.push(draft); // 失敗した分は一時保存に残す
+    }
+  }
+  saveDraftsList(remaining);
+  updateDraftBadge();
+  sendBtn.textContent = t('batchSendBtn');
+
+  closeDraftsScreen();
+  if(remaining.length === 0){
+    document.getElementById('previewArea').textContent = `${successCount}${t('batchSendDoneMsg')}`;
+  } else {
+    document.getElementById('previewArea').textContent = `${successCount}${t('batchSendPartialMsg')}`;
+  }
+  document.getElementById('modalBg').classList.add('show');
+}
+
+updateDraftBadge();
 applyTranslations();
 </script>
 
