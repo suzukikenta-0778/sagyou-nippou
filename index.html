@@ -262,6 +262,14 @@
   .draftDeleteConfirm{background:#fff3f3; border:1px solid #f0b7b7; border-radius:10px; padding:10px 12px; margin-top:4px;}
   .draftDeleteConfirmMsg{font-size:12.5px; color:#a33; margin-bottom:8px; line-height:1.5;}
   .draftDeleteConfirmBtn{flex:1; border:none; border-radius:8px; padding:9px 8px; font-size:13px; font-weight:700; cursor:pointer; background:#c23b3b; color:#fff;}
+  /* 「前回の記入を確認」の一覧・詳細に出す削除ボタン（一時保存の削除UIと同じ見た目で統一） */
+  .lsDeleteBtn{flex:0 0 auto; border:none; border-radius:8px; padding:8px 12px; font-size:13px; font-weight:700; cursor:pointer; background:#f5e6e6; color:#a33;}
+  .lsDeleteConfirm{background:#fff3f3; border:1px solid #f0b7b7; border-radius:10px; padding:10px 12px; margin-bottom:10px;}
+  .lsDeleteConfirmMsg{font-size:12.5px; color:#a33; margin-bottom:8px; line-height:1.5;}
+  .lsDeleteConfirmBtns{display:flex; gap:8px;}
+  .lsDeleteConfirmBtns button{flex:1; border:none; border-radius:8px; padding:9px 8px; font-size:13px; font-weight:700; cursor:pointer;}
+  .lsDeleteCancelBtn{background:var(--panel-bg); color:#333;}
+  .lsDeleteConfirmBtn{background:#c23b3b; color:#fff;}
   .draftCard.missing{border-color:#e8a0a0; background:#fff8f8;}
   .draftCard .draftMissingNote{font-size:12px; color:#d33333; margin-bottom:8px;}
   .draftsEmpty{color:#888; font-size:14px; text-align:center; padding:40px 0;}
@@ -688,6 +696,9 @@ const TR = {
   lastSubBackToListBtn:{ja:"← 一覧に戻る", id:"← Kembali ke daftar", es:"← Volver a la lista", pt:"← Voltar à lista"},
   lastSubPickWorkerSub:{ja:"作業者名を選んでください。", id:"Pilih nama pekerja.", es:"Seleccione el nombre del trabajador.", pt:"Selecione o nome do trabalhador."},
   lastSubChangeWorkerBtn:{ja:"← 作業者を選び直す", id:"← Pilih pekerja lain", es:"← Elegir otro trabajador", pt:"← Escolher outro trabalhador"},
+  lastSubDeleteConfirm:{ja:"この送信を削除します。よろしいですか？（削除すると元に戻せません）", id:"Hapus kiriman ini? (Tidak dapat dibatalkan)", es:"¿Eliminar este envío? (No se puede deshacer)", pt:"Excluir este envio? (Não pode ser desfeito)"},
+  lastSubDeletedToast:{ja:"削除しました。", id:"Dihapus.", es:"Eliminado.", pt:"Excluído."},
+  lastSubDeleteNoRow:{ja:"この送信は古い形式のため、削除できません。", id:"Ini tidak dapat dihapus (format lama).", es:"No se puede eliminar (formato antiguo).", pt:"Não é possível excluir (formato antigo)."},
 };
 let currentLang = 'ja';
 let reportMode = 'normal'; // 'normal'=加工日報 / 'setup'=段取り日報
@@ -1726,6 +1737,10 @@ function editDraft(id){
 let lastSubRaw = null;    // 現在プレビュー表示中の1件（読み込んで編集、で使う）
 let lastSubList = [];     // その作業者名の、本日の送信一覧（新しい順）
 let lastSubWorker = null; // 現在選択中の作業者名（ヘッダーのボタンから開くので、フォームの作業者名欄とは独立）
+let lastSubView = null;        // 'list' か 'detail'（削除確認を出し直すときに、元の画面に戻すために使う）
+let lastSubDetailIdx = null;   // 詳細表示中のインデックス（1件だけの場合も含む）
+let lastSubDetailIsOnly = false;
+let pendingDeleteLsIdx = null; // 削除確認を表示中のインデックス（nullなら確認なし）
 // ヘッダーのボタンから呼ばれる入口。フォームの作業者名欄の状態に関わらず、まず作業者を選んでもらう。
 function openLastSubFlow(){
   if(!WEBAPP_URL){ alert(t('lastSubNoUrl')); return; }
@@ -1765,7 +1780,7 @@ function checkLastSubmission(worker){
       // 旧形式（互換用。Apps Script未更新の場合）: {found, sentAt, data}
       let list = [];
       if(json && Array.isArray(json.list)) list = json.list;
-      else if(json && json.found && json.data) list = [{ sentAt: json.sentAt, line: json.data.ライン番号, reportType: json.data.日報種別, data: json.data }];
+      else if(json && json.found && json.data) list = [{ sentAt: json.sentAt, line: json.data.ライン番号, reportType: json.data.日報種別, data: json.data, rowNumber: json.rowNumber }];
 
       if(!json || !list.length){
         document.getElementById('lastSubModalMeta').textContent = '';
@@ -1788,18 +1803,31 @@ function checkLastSubmission(worker){
 // 送信が複数件あるとき、一覧から選べるようにする画面
 function showLastSubListView(){
   lastSubRaw = null;
+  lastSubView = 'list';
   document.getElementById('lastSubLoadBtn').style.display = 'none';
   document.getElementById('lastSubModalMeta').textContent =
     (lastSubList.length) + t('lastSubListCountSuffix');
   let h = `<button type="button" class="btn btn-reset" style="margin-bottom:10px;" onclick="showLastSubWorkerPicker()">${esc(t('lastSubChangeWorkerBtn'))}</button>`;
   h += '<div class="sheet">';
   lastSubList.forEach((item,i)=>{
-    h += `<div class="sheetrow" data-lsidx="${i}" style="cursor:pointer;">`+
-      `<div class="rowlabel"><span class="main">${esc(t('lineNo'))}</span><span class="sub">${esc(item.line!=null?item.line:'－')}</span></div>`+
-      `<div class="rowfields">`+
-      `<div class="fieldgroup"><span class="glabel">${esc(t('submitBtn'))}</span><div class="valueDisplay">${esc(item.sentAt||'')}</div></div>`+
-      `<div class="fieldgroup narrow"><span class="glabel">${esc(t('basicInfo'))}</span><div class="valueDisplay">${esc(item.reportType||'')}</div></div>`+
-      `</div></div>`;
+    if(pendingDeleteLsIdx === i){
+      h += `<div class="sheetrow">`+
+        `<div class="rowlabel"><span class="main">${esc(t('lineNo'))}</span><span class="sub">${esc(item.line!=null?item.line:'－')}</span></div>`+
+        `<div class="rowfields" style="flex-direction:column; align-items:stretch;">`+
+        `<div class="lsDeleteConfirm"><div class="lsDeleteConfirmMsg">${esc(t('lastSubDeleteConfirm'))}</div>`+
+        `<div class="lsDeleteConfirmBtns">`+
+        `<button type="button" class="lsDeleteCancelBtn" data-lscancel="1">${esc(t('cancelBtn'))}</button>`+
+        `<button type="button" class="lsDeleteConfirmBtn" data-lsdelconfirm="${i}">${esc(t('deleteBtn'))}</button>`+
+        `</div></div></div></div>`;
+    } else {
+      h += `<div class="sheetrow" data-lsidx="${i}" style="cursor:pointer;">`+
+        `<div class="rowlabel"><span class="main">${esc(t('lineNo'))}</span><span class="sub">${esc(item.line!=null?item.line:'－')}</span></div>`+
+        `<div class="rowfields">`+
+        `<div class="fieldgroup"><span class="glabel">${esc(t('submitBtn'))}</span><div class="valueDisplay">${esc(item.sentAt||'')}</div></div>`+
+        `<div class="fieldgroup narrow"><span class="glabel">${esc(t('basicInfo'))}</span><div class="valueDisplay">${esc(item.reportType||'')}</div></div>`+
+        `<button type="button" class="lsDeleteBtn" data-lsdel="${i}">${esc(t('deleteBtn'))}</button>`+
+        `</div></div>`;
+    }
   });
   h += '</div>';
   document.getElementById('lastSubModalBody').innerHTML = h;
@@ -1809,6 +1837,9 @@ function showLastSubListView(){
 function showLastSubDetailAt(idx, isOnly){
   const item = lastSubList[idx];
   if(!item) return;
+  lastSubView = 'detail';
+  lastSubDetailIdx = idx;
+  lastSubDetailIsOnly = isOnly;
   lastSubRaw = item.data || {};
   document.getElementById('lastSubModalMeta').textContent =
     `${item.sentAt || ''}　${lastSubRaw.日報種別 || ''}　${t('lineNo')}: ${lastSubRaw.ライン番号 || ''}`;
@@ -1818,13 +1849,66 @@ function showLastSubDetailAt(idx, isOnly){
   } else {
     backBtn = `<button type="button" class="btn btn-reset" style="margin-bottom:10px;" onclick="showLastSubWorkerPicker()">${esc(t('lastSubChangeWorkerBtn'))}</button>`;
   }
-  document.getElementById('lastSubModalBody').innerHTML = backBtn + renderLastSubPreview(lastSubRaw);
+  let delArea;
+  if(pendingDeleteLsIdx === idx){
+    delArea = `<div class="lsDeleteConfirm"><div class="lsDeleteConfirmMsg">${esc(t('lastSubDeleteConfirm'))}</div>`+
+      `<div class="lsDeleteConfirmBtns">`+
+      `<button type="button" class="lsDeleteCancelBtn" data-lscancel="1">${esc(t('cancelBtn'))}</button>`+
+      `<button type="button" class="lsDeleteConfirmBtn" data-lsdelconfirm="${idx}">${esc(t('deleteBtn'))}</button>`+
+      `</div></div>`;
+  } else {
+    delArea = `<button type="button" class="lsDeleteBtn" style="margin-bottom:10px;" data-lsdel="${idx}">${esc(t('deleteBtn'))}</button>`;
+  }
+  document.getElementById('lastSubModalBody').innerHTML = backBtn + delArea + renderLastSubPreview(lastSubRaw);
   document.getElementById('lastSubLoadBtn').style.display = '';
 }
+// 削除ボタン押下 → その行(または詳細画面)を確認表示に切り替える
+function askDeleteLastSub(idx){
+  pendingDeleteLsIdx = idx;
+  if(lastSubView === 'detail'){ showLastSubDetailAt(lastSubDetailIdx, lastSubDetailIsOnly); }
+  else { showLastSubListView(); }
+}
+function cancelDeleteLastSub(){
+  pendingDeleteLsIdx = null;
+  if(lastSubView === 'detail'){ showLastSubDetailAt(lastSubDetailIdx, lastSubDetailIsOnly); }
+  else { showLastSubListView(); }
+}
+// 削除確定 → サーバーへ削除リクエストを送り（応答は待たず）、画面上の一覧からも消す
+function doDeleteLastSub(idx){
+  const item = lastSubList[idx];
+  if(!item) return;
+  pendingDeleteLsIdx = null;
+  if(item.rowNumber == null){
+    // Apps Script が未更新（rowNumberを返さない旧版）の場合は削除できない旨を伝える
+    alert(t('lastSubDeleteNoRow'));
+    if(lastSubView === 'detail'){ showLastSubDetailAt(idx, lastSubDetailIsOnly); } else { showLastSubListView(); }
+    return;
+  }
+  if(WEBAPP_URL){
+    fetch(WEBAPP_URL, {
+      method:'POST',
+      mode:'no-cors',
+      headers:{'Content-Type':'text/plain;charset=utf-8'},
+      body: JSON.stringify({ action:'deleteSubmission', rowNumber:item.rowNumber, worker:lastSubWorker })
+    }).catch(()=>{});
+  }
+  lastSubList.splice(idx,1);
+  showToast(t('lastSubDeletedToast'));
+  if(lastSubList.length === 0){ showLastSubWorkerPicker(); }
+  else if(lastSubList.length === 1){ showLastSubDetailAt(0, true); }
+  else { showLastSubListView(); }
+}
 // モーダル内のクリックを拾う（モーダル本体の要素は固定なので、リスナーは1回だけ登録すればよい）
+// ・削除ボタン／削除確認ボタン（data-lsdel, data-lsdelconfirm, data-lscancel）→ 行クリックより先に判定する
 // ・作業者選択ボタン（data-lsworker）→ その作業者の本日の送信を取得
 // ・送信一覧の行（data-lsidx）→ その送信の詳細を表示
 document.getElementById('lastSubModalBody').addEventListener('click', function(e){
+  const delBtn = e.target.closest('[data-lsdel]');
+  if(delBtn){ askDeleteLastSub(+delBtn.dataset.lsdel); return; }
+  const delConfirmBtn = e.target.closest('[data-lsdelconfirm]');
+  if(delConfirmBtn){ doDeleteLastSub(+delConfirmBtn.dataset.lsdelconfirm); return; }
+  const delCancelBtn = e.target.closest('[data-lscancel]');
+  if(delCancelBtn){ cancelDeleteLastSub(); return; }
   const workerBtn = e.target.closest('[data-lsworker]');
   if(workerBtn){ checkLastSubmission(workerBtn.dataset.lsworker); return; }
   const row = e.target.closest('[data-lsidx]');
