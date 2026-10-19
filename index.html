@@ -116,6 +116,12 @@
   .fieldgroup{display:flex; flex-direction:column; gap:3px; min-width:84px; flex:1 1 110px;}
   .fieldgroup.narrow{flex:0 1 72px; min-width:60px;}
   .fieldgroup .glabel{font-size:10.5px; color:var(--sub); font-weight:700;}
+  .kazuRow{display:flex; align-items:center; gap:10px; flex-wrap:wrap;}
+  .kazuRow input{flex:1 1 auto; min-width:0;}
+  .rateHint{display:none; padding:5px 12px; border-radius:14px; font-weight:800; font-size:15px; white-space:nowrap;}
+  .rateHint.good{background:#e6f4ea; color:#1e7e34;}
+  .rateHint.warn{background:#fff3cd; color:#8a6500;}
+  .rateHint.bad{background:#fdecea; color:#c0392b;}
   .fieldgroup.pairbox{
     flex:1 1 100%; display:grid; grid-template-columns: 90px 1fr; gap:8px; align-items:end;
     background:#faf9f6; border:1px dashed var(--line); border-radius:8px; padding:8px;
@@ -398,7 +404,7 @@
     <div class="sheetrow">
       <div class="rowlabel"><span class="main" data-i18n="kazu">実績</span><span class="sub">KAZU</span></div>
       <div class="rowfields">
-        <div class="fieldgroup fullwidth"><input type="number" id="kazu" inputmode="numeric" data-i18n-ph="kazuPlaceholder" placeholder="例：120"></div>
+        <div class="fieldgroup fullwidth"><div class="kazuRow"><input type="number" id="kazu" inputmode="numeric" data-i18n-ph="kazuPlaceholder" placeholder="例：120"><span id="kazuRateHint" class="rateHint"></span></div></div>
       </div>
     </div>
 
@@ -753,6 +759,7 @@ function setReportMode(mode){
   });
   updateWorkerOptions();
   applyTranslations();
+  if(window.updateRateHint) updateRateHint();
 }
 // 作業者名のプルダウン：段取り日報は浅見・タケ・カツのみ、加工日報は全作業員
 function updateWorkerOptions(){
@@ -766,7 +773,7 @@ function updateWorkerOptions(){
 // ---------- 選択肢 ----------
 const WORKERS = ["タケ","カツ","金田","サユリ","タルピ","プトラ","ミカ","ディア","ウィスヌ","ヘリー","フェル","トリヴァ","甲斐","浅見","鈴木","高橋","杉浦"];
 const MAIN_WORKERS = ["浅見","タケ","カツ"];
-const PARTS = ["RD2287B-002(H)","RD2245B-011(R)","RD2364A-001(H)","RD2379B-010(R)","RD4057A-000(R)","RD2364A-011(R)","75130-VA4-0002(D)","13811-ZX2-0001(P)","13811-ZVP-0002(P)","82A-F10(軸受箱)","82A-F10HZ1(軸受箱)","RD2150A-006(H)","RD4029A-011(R)","V61(P)","RD2007A-010(R)","RD2007A-003(H)","RD2150B-000(R)","RD3106A-010(R)","31191-PCX-0000(I)","31191-RL5-A000(I)","31191-RRA-A000(I)","38943-P73-0000(I)","38943-PM3-3002(I)","38943-PR7-A000(I)"];
+const PARTS = ["RD2287B-002(H)","RD2245B-011(R)","RD2364A-001(H)","RD2379B-010(R)","RD4057A-000(R)","RD2364A-011(R)","75130-VA4-0002(D)","13811-ZX2-0001(P)","13811-ZVP-0002(P)","82A-F10(軸受箱)","82A-F10HZ1(軸受箱)","RD2150A-006(H)","RD4029A-011(R)","75171-V61-J000(P)","RD2007A-010(R)","RD2007A-003(H)","RD2150B-000(R)","RD3106A-010(R)","31191-PCX-0000(I)","31191-RL5-A000(I)","31191-RRA-A000(I)","38943-P73-0000(I)","38943-PM3-3002(I)","38943-PR7-A000(I)"];
 const PROCESSES = ["1","2","1 + 2","捨て加工","ブローチ","マシニング","研磨","1 + 2 + マシニング","焼入れ前　1 + 2","焼入れ後　3 + ブローチ","焼入れ後　3","焼入れ後　ブローチ","焼入れ後　3 + 4 + ブローチ","1 + 2 + ブローチ + 研磨"];
 // 加工：事象（共通の用語は翻訳。CHIP欠け由来のバリ/むしれは2026-10のご依頼で名称変更済み）
 const DEFECT_KAKOU_KEY = ["height","dakon","naikeiS","naikeiL","bariChip","mushireChip"];
@@ -1171,6 +1178,158 @@ function rebuildDynamicLabels(){
 }
 
 buildStopRows();
+
+/* =========================================================
+   稼働率のその場表示（2026-10-19 追加）
+   ------------------------------------------------------------
+   実績(KAZU)を入力した瞬間に、Artifact「加工課 日報集計」の
+   稼働率計算ロジック（ENGINE.compute、ライン編成マスタ照合）を
+   簡略移植して、その場で見込みの稼働率を表示する。
+   あくまで「作業員がその場で気づくための目安」であり、公式の
+   集計（Artifact側）は別途、毎時の自動反映ジョブで計算される。
+   ライン編成マスタ等はこの時点のスナップショットを埋め込んでいる
+   ため、CTや持ち台数等の変更があった場合は index.html 側の
+   RATE_MASTER を更新しないと実際の値とズレる（品番/工程の選択肢と
+   同様の既知の制約）。
+   ========================================================= */
+const RATE_MASTER = {"breaks":[{"e":610,"name":"午前休憩","robot":false,"s":600},{"e":780,"name":"昼休憩","robot":true,"s":735},{"e":910,"name":"午後休憩","robot":false,"s":900},{"e":1030,"name":"残業前休憩","robot":false,"s":1020}],"endWork":{"min":25,"robot":true},"shifts":[{"e":1020,"name":"定時","s":480},{"e":1140,"name":"2時間残業","s":480},{"e":1140,"name":"早出2時間残業","s":460}],"target":0.9,"rateExclude":["杉浦","浅見","鈴木"],"ctLog":[{"ct":136,"from":"2026-09-14","line":1,"note":"プログラム見直し（パス削減）でCTを140秒→136秒に短縮。現場では9/14から試行中。L6は未実施のため未登録。ライン編成マスタのCTは本登録まで140秒のまま。","part":"RD2287B-002","process":"1工程"},{"ct":120,"from":"2026-09-28","line":6,"note":"プログラム見直し（パス削減）でCTを124秒→120秒に短縮。現場では9/28から実装開始","part":"RD2287B-002","process":"1工程"},{"ct":null,"from":"2026-09-29","line":4,"note":"プログラムの見直し(回転速度を上げた)","part":"RD2379B-010","process":"1工程"}],"unitChg":[{"at":780,"date":"2026-09-17","line":14,"note":"3台中1台が故障し13:00から2台","part":"RD2379B-010","process":"2工程","units":2},{"at":null,"date":"2026-09-18","line":14,"note":"故障機は復旧せず朝から2台","part":"RD2379B-010","process":"2工程","units":2},{"at":585,"date":"2026-09-22","line":14,"note":"3台中1台が故障し9:45から2台","part":"RD2379B-010","process":"2工程","units":2},{"at":880,"date":"2026-09-29","line":14,"note":"機械修理の為、14時40分から2台","part":"RD2379B-010","process":"2工程","units":2},{"at":480,"date":"2026-10-05","line":14,"note":"8:00〜9:00は2台","part":"RD2379B-010","process":"2工程","units":2},{"at":555,"date":"2026-10-05","line":14,"note":"9:15から3台","part":"RD2379B-010","process":"2工程","units":3},{"at":480,"date":"2026-10-12","line":9,"note":"朝から1工程機械立ち上がらず1台で生産を行いました。","part":"RD2364A-001","process":"ライン一括","units":1},{"at":480,"date":"2026-10-13","line":9,"note":"朝から1工程機械立ち上がらず1台で生産を行いました。","part":"RD2364A-001","process":"ライン一括","units":1},{"at":480,"date":"2026-10-14","line":9,"note":"朝から1工程機械立ち上がらず1台で生産を行いました。","part":"RD2364A-001","process":"ライン一括","units":1}],"lines":[{"line":1,"part":"RD2287B-002","process":"1工程","include":"する","kind":"ロボット","units":1,"ctPer":140},{"line":2,"part":"RD2379B-010","process":"1工程","include":"する","kind":"ロボット","units":1,"ctPer":55},{"line":3,"part":"RD2245B-011","process":"1工程","include":"する","kind":"ロボット","units":1,"ctPer":59},{"line":4,"part":"RD2245B-011","process":"1工程","include":"する","kind":"ロボット","units":1,"ctPer":115},{"line":5,"part":"RD2364A-001","process":"1工程","include":"する","kind":"手付","units":2,"ctPer":60.5},{"line":5,"part":"RD2364A-001","process":"2工程","include":"する","kind":"手付","units":1,"ctPer":40},{"line":6,"part":"RD2287B-002","process":"1工程","include":"する","kind":"手付","units":2,"ctPer":62},{"line":6,"part":"RD2287B-002","process":"2工程","include":"する","kind":"手付","units":1,"ctPer":42},{"line":7,"part":"RD2364A-001","process":"ブローチ工程","include":"する","kind":"手付","units":1,"ctPer":33},{"line":12,"part":"RD2287B-002","process":"ブローチ工程","include":"する","kind":"手付","units":1,"ctPer":33},{"line":8,"part":"RD2245B-011","process":"2工程","include":"する","kind":"手付","units":3,"ctPer":42},{"line":9,"part":"RD2364A-001","process":"1工程","include":"する","kind":"手付","units":2,"ctPer":66.5},{"line":9,"part":"RD2364A-001","process":"2工程","include":"する","kind":"手付","units":1,"ctPer":39},{"line":10,"part":"75130-VA4-0002","process":"1工程","include":"する","kind":"手付","units":1,"ctPer":88},{"line":10,"part":"75130-VA4-0002","process":"2工程","include":"する","kind":"手付","units":1,"ctPer":86},{"line":12,"part":"13811-ZX2-0001","process":"捨て加工","include":"しない","kind":"手付","units":1,"ctPer":56},{"line":12,"part":"13811-ZX2-0001","process":"1工程","include":"する","kind":"手付","units":1,"ctPer":186},{"line":12,"part":"13811-ZX2-0001","process":"2工程","include":"する","kind":"手付","units":1,"ctPer":125},{"line":12,"part":"13811-ZX2-0001","process":"マシニング工程","include":"する","kind":"手付","units":1,"ctPer":129},{"line":12,"part":"13811-ZX2-0001","process":"ブローチ工程","include":"しない","kind":"手付","units":1,"ctPer":55},{"line":12,"part":"13811-ZVP-0002","process":"捨て加工","include":"しない","kind":"手付","units":1,"ctPer":56},{"line":12,"part":"13811-ZVP-0002","process":"1工程","include":"する","kind":"手付","units":1,"ctPer":232},{"line":12,"part":"13811-ZVP-0002","process":"2工程","include":"する","kind":"手付","units":1,"ctPer":125},{"line":12,"part":"13811-ZVP-0002","process":"マシニング工程","include":"する","kind":"手付","units":1,"ctPer":129},{"line":12,"part":"13811-ZVP-0002","process":"ブローチ工程","include":"しない","kind":"手付","units":1,"ctPer":55},{"line":11,"part":"RD2287B-002","process":"2工程","include":"する","kind":"手付","units":1,"ctPer":55},{"line":13,"part":"RD2379B-010","process":"2工程","include":"する","kind":"手付","units":2,"ctPer":49.5},{"line":14,"part":"RD2379B-010","process":"2工程","include":"する","kind":"手付","units":3,"ctPer":37.3},{"line":4,"part":"RD2364A-011","process":"1工程","include":"する","kind":"ロボット","units":1,"ctPer":120},{"line":12,"part":"RD2364A-011","process":"2工程","include":"する","kind":"手付","units":1,"ctPer":117},{"line":11,"part":"82A-F10","process":"1工程","include":"する","kind":"手付","units":1,"ctPer":97},{"line":11,"part":"82A-F10","process":"マシニング工程","include":"する","kind":"手付","units":1,"ctPer":131},{"line":11,"part":"82A-F10HZ1","process":"マシニング工程","include":"する","kind":"手付","units":1,"ctPer":155},{"line":11,"part":"82A-F10HZ1","process":"1工程","include":"する","kind":"手付","units":1,"ctPer":97},{"line":13,"part":"RD4057A-000","process":"1工程","include":"する","kind":"手付","units":1,"ctPer":50},{"line":13,"part":"RD4057A-000","process":"2工程","include":"する","kind":"手付","units":1,"ctPer":47},{"line":4,"part":"RD2379B-010","process":"1工程","include":"する","kind":"ロボット","units":1,"ctPer":100},{"line":13,"part":"75171-V61-J000","process":"1工程","include":"する","kind":"手付","units":1,"ctPer":176},{"line":13,"part":"75171-V61-J000","process":"2工程","include":"する","kind":"手付","units":1,"ctPer":59},{"line":10,"part":"75130-VA4-0002","process":"ブローチ工程","include":"する","kind":"手付","units":1,"ctPer":28},{"line":13,"part":"75171-V61-J000","process":"ブローチ工程","include":"する","kind":"手付","units":1,"ctPer":28},{"line":13,"part":"RD2007A-003","process":"焼入れ前1+2工程","include":"する","kind":"手付","units":1,"ctPer":115},{"line":13,"part":"RD2007A-003","process":"焼入れ後3+ブローチ工程","include":"する","kind":"手付","units":1,"ctPer":107},{"line":12,"part":"RD2007A-003","process":"マシニング工程","include":"する","kind":"手付","units":1,"ctPer":131},{"line":14,"part":"RD2007A-003","process":"磨き工程","include":"する","kind":"手付","units":1,"ctPer":201},{"line":12,"part":"RD3106A-010","process":"1工程","include":"する","kind":"手付","units":1,"ctPer":82},{"line":12,"part":"RD3106A-010","process":"2工程","include":"する","kind":"手付","units":1,"ctPer":146},{"line":12,"part":"RD2150B-000","process":"1工程","include":"する","kind":"手付","units":1,"ctPer":100},{"line":12,"part":"RD2150B-000","process":"2工程","include":"する","kind":"手付","units":1,"ctPer":118},{"line":12,"part":"RD2364A-011","process":"1工程","include":"する","kind":"手付","units":1,"ctPer":103},{"line":14,"part":"RD2364A-011","process":"2工程","include":"する","kind":"手付","units":3,"ctPer":43.67},{"line":14,"part":"RD2150A-006","process":"1工程","include":"する","kind":"手付","units":1,"ctPer":88},{"line":14,"part":"RD2150A-006","process":"2工程","include":"する","kind":"手付","units":1,"ctPer":65},{"line":14,"part":"RD2150A-006","process":"ブローチ工程","include":"する","kind":"手付","units":1,"ctPer":28},{"line":14,"part":"RD2150A-006","process":"磨き工程","include":"する","kind":"手付","units":1,"ctPer":0},{"line":14,"part":"RD2150A-006","process":"マシニング工程","include":"する","kind":"手付","units":1,"ctPer":0},{"line":13,"part":"RD4029A-011","process":"1工程","include":"する","kind":"手付","units":1,"ctPer":63},{"line":13,"part":"RD4029A-011","process":"2工程","include":"する","kind":"手付","units":1,"ctPer":56},{"line":13,"part":"121-16G42-02","process":"1工程","include":"する","kind":"手付","units":1,"ctPer":88},{"line":13,"part":"121-16G42-02","process":"2工程","include":"する","kind":"手付","units":1,"ctPer":53}]};
+
+(function(){
+  const rN = v => { const x = parseFloat(v); return isFinite(x) ? x : 0; };
+  const rHas = v => v !== null && v !== undefined && v !== '' && v !== '－';
+  const RATE_STAGES = ["捨て加工","1工程","2工程","ブローチ工程","マシニング工程","磨き工程"];
+  const RATE_PROC_ALIAS = { "1":"1工程","2":"2工程","3":"3工程","4":"4工程","捨て加工":"捨て加工","ブローチ":"ブローチ工程","マシニング":"マシニング工程","研磨":"磨き工程","磨き":"磨き工程","焼入れ後　3 + ブローチ":"焼入れ後3+ブローチ工程" };
+  function rateCanonProcess(p){
+    p = String(p == null ? '' : p).trim();
+    if(!p) return '';
+    if(RATE_STAGES.includes(p) || p === 'ライン一括') return p;
+    if(RATE_PROC_ALIAS[p]) return RATE_PROC_ALIAS[p];
+    if(/[+＋]/.test(p) && !/焼入れ/.test(p)) return 'ライン一括';
+    return p;
+  }
+  const rateCanonPart = p => String(p == null ? '' : p).replace(/[（(][^）)]*[）)]\s*$/, '').trim();
+  function rateLm(line, part, proc){
+    return (RATE_MASTER.lines || []).filter(x => rN(x.line) === rN(line) && x.part === part && (proc === 'ライン一括' ? x.include !== 'しない' : x.process === proc));
+  }
+  function rateOverlap(s, e, kind){
+    let t = 0;
+    for(const b of RATE_MASTER.breaks || []) if(kind === '手付' || b.robot) t += Math.max(0, Math.min(e, b.e) - Math.max(s, b.s));
+    return t;
+  }
+  function rateShiftOf(s, e){
+    const hit = (RATE_MASTER.shifts || []).find(x => x.s === s && x.e === e);
+    return hit ? hit.name : '時間指定';
+  }
+  function rateTodayStr(){
+    const d = new Date();
+    const p2 = n => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${p2(d.getMonth() + 1)}-${p2(d.getDate())}`;
+  }
+
+  // 戻り値: null（表示しない）または { rate, over100 }
+  function computeLiveRate(){
+    if(document.body.classList.contains('mode-setup')) return null; // 段取り日報は対象外（公式集計と同じ扱い）
+    const lineRaw = fieldVal('lineNo');
+    const partRaw = fieldVal('partNo');
+    const procRaw = fieldVal('process');
+    const kazuEl = document.getElementById('kazu');
+    const goodStr = kazuEl ? kazuEl.value : '';
+    if(!rHas(lineRaw) || !rHas(partRaw) || !rHas(procRaw) || !rHas(goodStr)) return null;
+
+    const line = rN(lineRaw);
+    const part = rateCanonPart(partRaw);
+    const proc = rateCanonProcess(procRaw);
+    const good = rN(goodStr);
+
+    const L = rateLm(line, part, proc);
+    if(!L.length) return null; // ライン編成マスタに未登録
+    const kind = L.some(a => a.kind === '手付') ? '手付' : (L.some(a => a.kind === 'ロボット') ? 'ロボット' : '');
+    if(!kind) return null;
+
+    const sH = fieldVal('startH'), sM = fieldVal('startM'), eH = fieldVal('endH'), eM = fieldVal('endM');
+    if(!rHas(sH) || !rHas(eH)) return null;
+    const s = rN(sH) * 60 + rN(sM);
+    let e = rN(eH) * 60 + rN(eM);
+    if(e < s) e += 1440;
+    if(e === s) return null;
+    const shift = rateShiftOf(s, e);
+
+    const sup = rN(fieldVal('helpTime'));
+    const stop = [1, 2, 3].reduce((a, i) => a + rN(fieldVal('stopTime' + i)), 0);
+
+    const endWork = RATE_MASTER.endWork || { min: 25, robot: true };
+    const ew = shift !== '時間指定' && (kind === '手付' || endWork.robot) ? rN(endWork.min) : 0;
+    const deduct = Math.max(0, rateOverlap(s, e, kind) + ew - sup);
+    const avail = (e - s) / 60 - deduct / 60 - stop / 60;
+    if(!(avail > 0)) return null;
+
+    const masterUnits = L.length ? Math.max(...L.map(a => rN(a.units))) : 0;
+    const today = rateTodayStr();
+    let effUnits = null;
+    const uc = (RATE_MASTER.unitChg || []).filter(u => u.date === today && rN(u.line) === line && u.part === part && rateCanonProcess(u.process) === proc);
+    if(uc.length && masterUnits){
+      const ch = uc.map(u => ({ at: rHas(u.at) ? rN(u.at) : 0, u: rN(u.units) })).sort((a, b) => a.at - b.at);
+      const segs = []; let cur = s, curU = masterUnits;
+      ch.forEach(c => { const t = Math.min(e, Math.max(s, c.at)); segs.push([cur, t, curU]); cur = t; curU = c.u; });
+      segs.push([cur, e, curU]);
+      let w = 0, sum = 0;
+      segs.forEach(([a, b, u], i) => { const d = Math.max(0, (b - a) - rateOverlap(a, b, kind) - (i === segs.length - 1 ? ew : 0)); w += d; sum += u * d; });
+      if(w > 0) effUnits = sum / w;
+    }
+
+    const logs = (RATE_MASTER.ctLog || []).filter(c => rN(c.line) === line && c.part === part && (proc === 'ライン一括' || rateCanonProcess(c.process) === proc));
+    let ct = null;
+    if(logs.length){
+      const from = logs.map(c => c.from).sort().pop();
+      const v = Math.max(...logs.map(c => rN(c.ct)));
+      if(today >= from){ const u = effUnits || masterUnits; if(u) ct = v / u; }
+    }
+    if(ct == null){
+      const base = Math.max(...L.map(a => rN(a.ctPer)));
+      ct = effUnits ? base * masterUnits / effUnits : base;
+    }
+    if(!(ct > 0)) return null;
+
+    const theo = avail * 3600 / ct;
+    if(!(theo > 0)) return null;
+    return good / theo;
+  }
+
+  function updateRateHint(){
+    const hint = document.getElementById('kazuRateHint');
+    if(!hint) return;
+    let rate = null;
+    try{ rate = computeLiveRate(); }catch(e){ rate = null; }
+    if(rate == null || !isFinite(rate)){
+      hint.style.display = 'none';
+      hint.textContent = '';
+      hint.classList.remove('good', 'warn', 'bad');
+      return;
+    }
+    const target = RATE_MASTER.target || 0.9;
+    hint.classList.remove('good', 'warn', 'bad');
+    if(rate > 1) hint.classList.add('bad');
+    else if(rate >= target) hint.classList.add('good');
+    else if(rate >= target - 0.2) hint.classList.add('warn');
+    else hint.classList.add('bad');
+    hint.textContent = `稼働率 ${(rate * 100).toFixed(1)}%`;
+    hint.style.display = 'inline-block';
+  }
+  window.updateRateHint = updateRateHint;
+
+  const RATE_WATCH_IDS = ['lineNo', 'partNo', 'process', 'startH', 'startM', 'endH', 'endM', 'helpTime', 'stopTime1', 'stopTime2', 'stopTime3'];
+  RATE_WATCH_IDS.forEach(id => {
+    const el = document.getElementById(id);
+    if(el) el.addEventListener('change', updateRateHint);
+  });
+  const kazuEl = document.getElementById('kazu');
+  if(kazuEl){
+    kazuEl.addEventListener('input', updateRateHint);
+    kazuEl.addEventListener('change', updateRateHint);
+  }
+  updateRateHint();
+})();
+
 buildChipTimeRow();
 buildDefectKakou();
 buildDefectSozai();
@@ -1624,6 +1783,7 @@ function resetForm(){
   document.querySelectorAll('.chipTimeGroup').forEach((el,idx)=>{ if(idx>0) el.classList.add('hidden-row'); });
   document.querySelectorAll('.defectPair').forEach((el)=>{ if(!el.id.endsWith('Pair1')) el.classList.add('hidden-row'); });
   document.querySelectorAll('.otherFuryouRow').forEach((el,idx)=>{ if(idx>0) el.classList.add('hidden-row'); });
+  if(window.updateRateHint) updateRateHint();
 }
 
 // 送信後、同じ作業者がそのまま次のラインの日報入力に移れるようにする
