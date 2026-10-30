@@ -94,6 +94,10 @@
     display:flex; border-bottom:1px solid var(--line); align-items:stretch; min-height:54px;
   }
   .sheetrow:last-child{border-bottom:none;}
+  /* 新規品目マスタ登録情報：工程ブロック同士の区切りを分かりやすくするため、
+     2つめ以降のブロックの上にすき間と太めの区切り線を入れる */
+  .tiProcessBlock{margin-top:14px; padding-top:10px; border-top:2px solid var(--line);}
+  .tiProcessBlock:first-child{margin-top:0; padding-top:0; border-top:none;}
   /* その他1〜3の間の仕切り線はなくし、区切りは「高さ」の下の1本だけにする */
   .otherFuryouRow{border-bottom:none;}
   #heightRow{border-bottom:1px solid var(--line) !important;}
@@ -115,6 +119,8 @@
   }
   .fieldgroup{display:flex; flex-direction:column; gap:3px; min-width:84px; flex:1 1 110px;}
   .fieldgroup.narrow{flex:0 1 72px; min-width:60px;}
+  /* CT（秒/個）・交換回数は例の表示（例：45.2／例：200）が見切れないよう、narrowより少し広めにする */
+  .fieldgroup.ctbox{flex:0 1 100px; min-width:90px;}
   .fieldgroup .glabel{font-size:10.5px; color:var(--sub); font-weight:700;}
   .kazuRow{display:flex; align-items:center; gap:10px; flex-wrap:wrap;}
   .kazuRow input{flex:1 1 auto; min-width:0;}
@@ -408,6 +414,14 @@
       </div>
     </div>
 
+    <!-- 段取り不良数（段取り日報のみ。実績の直下に配置） -->
+    <div class="sheetrow setupOnly" id="setupDefectRow">
+      <div class="rowlabel"><span class="main" id="setupDefectLabel" data-i18n="setupLabel">段取り</span></div>
+      <div class="rowfields">
+        <div class="fieldgroup narrow"><span class="glabel" data-i18n="qty">数量</span><select id="qtySetup"></select></div>
+      </div>
+    </div>
+
     <!-- 刃具交換者名 Name（段取り日報では不要） -->
     <div class="sheetrow normalOnly">
       <div class="rowlabel"><span class="main" data-i18n="toolExchange">刃具交換者名</span><span class="sub">Name</span></div>
@@ -416,6 +430,16 @@
       </div>
     </div>
 
+  </div>
+
+  <!-- 新規品目マスタ登録情報（段取り日報で、マスタに未登録の組み合わせを検出した時のみ表示）。
+       使用刃物・刃具寿命・サイクルタイムは、ここでのみ（新規品目の場合のみ）、工程ごとに入力する。 -->
+  <div class="sheet setupOnly" id="newItemContainer" style="display:none;">
+    <div class="sheet-title">新規品目マスタ登録情報</div>
+    <div style="padding:10px 14px;font-size:13px;color:#b45309;background:#fffbeb;border-bottom:1px solid var(--line);">
+      このライン／品番／工程の組み合わせはマスタに未登録です。使用刃物・交換回数・サイクルタイムを工程ごとに入力してください。日報の取り込み時に登録待ちリストへ追加され、鈴木様の承認後に正式登録されます。
+    </div>
+    <div id="newItemToolRowsContainer"></div>
   </div>
 
   <!-- CHIP交換時間 STOP（1回 → 入力で2回…5回まで）：独立したくくり（段取り日報では不要） -->
@@ -430,38 +454,30 @@
   <!-- 加工前の不良 - 素材：独立したくくり（1組目を選択したら2組目・3組目が表示）（段取り日報では不要） -->
   <div class="sheet normalOnly" id="defectSozaiContainer"></div>
 
-  <!-- 加工不良：CHIP／ダコン／高さ／段取り／その他　それぞれが独立したくくり（数量のみ）。
-       段取り日報では「段取り」行（段取り不良数）だけを残し、他は非表示にする。 -->
-  <div class="sheet">
-    <div class="sheet-title normalOnly" data-i18n="kakouFuryouTitle">加工不良</div>
-    <div class="normalOnly">
-      <div class="sheetrow">
-        <div class="rowlabel"><span class="main" data-i18n="chipLabel">CHIP</span></div>
-        <div class="rowfields">
-          <div class="fieldgroup narrow"><span class="glabel" data-i18n="qty">数量</span><select id="qtyChip"></select></div>
-        </div>
-      </div>
-      <div class="sheetrow">
-        <div class="rowlabel"><span class="main" data-i18n="dakonLabel">ダコン</span></div>
-        <div class="rowfields">
-          <div class="fieldgroup narrow"><span class="glabel" data-i18n="qty">数量</span><select id="qtyDakon"></select></div>
-        </div>
-      </div>
-      <div class="sheetrow" id="heightRow">
-        <div class="rowlabel"><span class="main" data-i18n="heightLabel">高さ</span></div>
-        <div class="rowfields">
-          <div class="fieldgroup narrow"><span class="glabel" data-i18n="qty">数量</span><select id="qtyHeight"></select></div>
-        </div>
-      </div>
-    </div>
-    <div class="sheetrow setupOnly" id="setupDefectRow">
-      <div class="rowlabel"><span class="main" id="setupDefectLabel" data-i18n="setupLabel">段取り</span></div>
+  <!-- 加工不良：CHIP／ダコン／高さ／その他　それぞれが独立したくくり（数量のみ）。段取り日報では非表示
+       （段取り不良数は基本情報の実績の直下に移動済み）。 -->
+  <div class="sheet normalOnly">
+    <div class="sheet-title" data-i18n="kakouFuryouTitle">加工不良</div>
+    <div class="sheetrow">
+      <div class="rowlabel"><span class="main" data-i18n="chipLabel">CHIP</span></div>
       <div class="rowfields">
-        <div class="fieldgroup narrow"><span class="glabel" data-i18n="qty">数量</span><select id="qtySetup"></select></div>
+        <div class="fieldgroup narrow"><span class="glabel" data-i18n="qty">数量</span><select id="qtyChip"></select></div>
       </div>
     </div>
-    <!-- その他：1つ目を選択したら2つ目・3つ目が表示。数量の横に内容欄あり（段取り日報では不要） -->
-    <div id="otherFuryouContainer" class="normalOnly"></div>
+    <div class="sheetrow">
+      <div class="rowlabel"><span class="main" data-i18n="dakonLabel">ダコン</span></div>
+      <div class="rowfields">
+        <div class="fieldgroup narrow"><span class="glabel" data-i18n="qty">数量</span><select id="qtyDakon"></select></div>
+      </div>
+    </div>
+    <div class="sheetrow" id="heightRow">
+      <div class="rowlabel"><span class="main" data-i18n="heightLabel">高さ</span></div>
+      <div class="rowfields">
+        <div class="fieldgroup narrow"><span class="glabel" data-i18n="qty">数量</span><select id="qtyHeight"></select></div>
+      </div>
+    </div>
+    <!-- その他：1つ目を選択したら2つ目・3つ目が表示。数量の横に内容欄あり -->
+    <div id="otherFuryouContainer"></div>
   </div>
 
   <!-- 素材不良：周端/嵌合A・ポリVD・内径/座面B・ボス部C・鋳肌面E　それぞれが独立したくくり（数量のみ、アルファベットは名称の右） -->
@@ -760,6 +776,7 @@ function setReportMode(mode){
   updateWorkerOptions();
   applyTranslations();
   if(window.updateRateHint) updateRateHint();
+  if(window.checkNewItemRegistration) checkNewItemRegistration();
 }
 // 作業者名のプルダウン：段取り日報は浅見・タケ・カツのみ、加工日報は全作業員
 function updateWorkerOptions(){
@@ -775,7 +792,14 @@ const WORKERS = ["タケ","カツ","金田","サユリ","タルピ","プトラ",
 const MAIN_WORKERS = ["浅見","タケ","カツ"];
 const PARTS = ["RD2287B-002(H)","RD2245B-011(R)","RD2364A-001(H)","RD2379B-010(R)","RD4057A-000(R)","RD2364A-011(R)","75130-VA4-0002(D)","13811-ZX2-0001(P)","13811-ZVP-0002(P)","82A-F10(軸受箱)","82A-F10HZ1(軸受箱)","RD2150A-006(H)","RD4029A-011(R)","75171-V61-J000(P)","RD2007A-010(R)","RD2007A-003(H)","RD2150B-000(R)","RD3106A-010(R)","31191-PCX-0000(I)","31191-RL5-A000(I)","31191-RRA-A000(I)","38943-P73-0000(I)","38943-PM3-3002(I)","38943-PR7-A000(I)"];
 const PROCESSES = ["1","2","1 + 2","捨て加工","ブローチ","マシニング","研磨","1 + 2 + マシニング","焼入れ前　1 + 2","焼入れ後　3 + ブローチ","焼入れ後　3","焼入れ後　ブローチ","焼入れ後　3 + 4 + ブローチ","1 + 2 + ブローチ + 研磨"];
+// 「工程単価ツール」Artifactの刃具マスタ（blades）を簡略移植したもの。刃具マスタに追加・変更があった場合は手動更新が必要。
+const BLADE_MASTER = [{"no":1,"name":"WNMG080408 T515","maker":"タンガロイ"},{"no":2,"name":"CNMG120408 T515","maker":"タンガロイ"},{"no":3,"name":"VNMG160408 T515","maker":"タンガロイ"},{"no":4,"name":"GCMN5025-RG","maker":"住友"},{"no":5,"name":"CPMT090308-MU","maker":"住友"},{"no":6,"name":"CPMH080202-FV","maker":"三菱"},{"no":7,"name":"DNMG150408-MK","maker":"三菱"},{"no":8,"name":"CPMT090308GP","maker":"京セラ"},{"no":9,"name":"VNMG160408-MK 5115","maker":"三菱"},{"no":10,"name":"TNMG160412N-SU T1000A","maker":"住友"},{"no":11,"name":"RPGW0803M0","maker":"住友"},{"no":12,"name":"RPGW1004M0","maker":"住友"},{"no":13,"name":"RD2245B-011　成型バイト","maker":"松下商会（雄踏鉱研）"},{"no":14,"name":"RD2379B-010　成型バイト","maker":"松下商会（雄踏鉱研）"},{"no":15,"name":"ZX2　成型バイト","maker":"松下商会（雄踏鉱研）"},{"no":16,"name":"RD2364A-011　成型バイト","maker":"松下商会（雄踏鉱研）"},{"no":17,"name":"RD2364A-001　ブローチ","maker":"松下商会（新潟精密）"},{"no":18,"name":"RD2287B-002　ブローチ","maker":"松下商会（新潟精密）"},{"no":19,"name":"ZX2　ブローチ","maker":"松下商会（新潟精密）"},{"no":20,"name":"VA4　ブローチ","maker":"松下商会（新潟精密）"},{"no":21,"name":"スプライン　ブローチ研磨","maker":"松下商会（雄踏鉱研）"},{"no":22,"name":"WNMG080408N-GU","maker":"住友"},{"no":23,"name":"WNMG080404HQ","maker":"京セラ"},{"no":24,"name":"GH8020-25","maker":"京セラ"},{"no":25,"name":"CPMH080208HQ","maker":"京セラ"},{"no":26,"name":"キー溝　ブローチ研磨","maker":"松下商会（雄踏鉱研）"},{"no":27,"name":"AD-4D　5-5","maker":"OSG"},{"no":28,"name":"C32GUX　NK1010","maker":"富士元工業株式会社"},{"no":29,"name":"EX-SFT 2.5P M6×1","maker":"OSG"},{"no":30,"name":"ドリル　研磨","maker":"松下商会（雄踏鉱研）"},{"no":31,"name":"V61 ブローチ","maker":"松下商会（新潟精密）"},{"no":32,"name":"V61　成型バイト","maker":"松下商会（雄踏鉱研）"},{"no":33,"name":"CPMT090308-GP","maker":"住友"},{"no":34,"name":"CPMT090304N-MU","maker":"住友"},{"no":35,"name":"AQDEXST　2000-90","maker":"NACHI"},{"no":36,"name":"AQDEX3FR　1400","maker":"NACHI"},{"no":37,"name":"E120HX-90-8","maker":"7 leaders "},{"no":38,"name":"φ14ドリル　研磨（メーカー研磨）","maker":"NACHI"},{"no":39,"name":"φ10.4ドリル　研磨（メーカー研磨）","maker":"NACHI"},{"no":40,"name":"φ20ドリル　研磨（メーカー研磨）","maker":"NACHI"},{"no":41,"name":"AQDEX3FR　1040","maker":"NACHI"},{"no":42,"name":"SGP012M1.75","maker":"NACHI"},{"no":"43","name":"RD3106A-010　成型バイト","maker":"松下商会（雄踏鉱研）"},{"no":"44","name":"VBMT110304HQ　識別溝","maker":"京セラ"},{"no":"45","name":"RD2150B-000　成型バイト　4山","maker":"松下商会（雄踏鉱研）"},{"no":"46","name":"RD2150B-000　成型バイト　6山","maker":"松下商会（雄踏鉱研）"},{"no":"47","name":"HFPR6030IC20","maker":"イスカル"},{"no":"48","name":"TNMG160402PP","maker":"京セラ"},{"no":"49","name":"3NU-TNGA160404LT","maker":"住友"},{"no":"50","name":"SCMT060210-GM-I/205-GM-E","maker":"京セラ"},{"no":"51","name":"GT2 68SSVD0101+S03　成型バイト","maker":"松下商会（雄踏鉱研）"},{"no":"52","name":"GT2 70SSF0308+S01　成型バイト","maker":"松下商会（雄踏鉱研）"},{"no":"53","name":"WNMG080408N-FA","maker":"住友"}];
 // 加工：事象（共通の用語は翻訳。CHIP欠け由来のバリ/むしれは2026-10のご依頼で名称変更済み）
+// 「工程単価ツール」Artifactの使用刃物マスタ（bladeUse）の切削部位（spot）を簡略移植したもの。
+// 切削部位の種類に追加・変更があった場合は手動更新が必要。
+const SPOT_MASTER = ["2.5R仕上げ", "3R仕上げ", "M12タップ", "M6タップ", "V仕上げ", "V荒", "φ10.4ドリル", "φ10.4ドリル　研磨", "φ10　荒", "φ14ドリル", "φ14ドリル　研磨", "φ20　表面　面取り", "φ20ドリル　研磨", "φ5ドリル", "φ8　荒", "ドリル　研磨", "ナライ荒", "ボス仕上げ", "ボス側　外径荒", "モノV仕上げ", "内径仕上げ", "内径荒", "外径仕上げ", "外径荒", "外径荒②", "幅・高さ", "座面仕上げ", "座面側　外径荒", "溝荒", "研磨", "穴仕上げ", "穴荒", "端面　ツバ", "端面仕上げ", "端面内径仕上げ", "端面荒", "裏面　面取り", "識別溝", "面取り", "８㎜幅", "Ｖ仕上げ"];
+// 切削部位のローマ字表記（外国人スタッフ向けに「漢字（ローマ字）」でプルダウンに表示する）。
+const SPOT_ROMAJI = {"2.5R仕上げ":"2.5R Shiage","3R仕上げ":"3R Shiage","M12タップ":"M12 Tap","M6タップ":"M6 Tap","V仕上げ":"V Shiage","V荒":"V Ara","φ10.4ドリル":"φ10.4 Doriru","φ10.4ドリル　研磨":"φ10.4 Doriru Kenma","φ10　荒":"φ10 Ara","φ14ドリル":"φ14 Doriru","φ14ドリル　研磨":"φ14 Doriru Kenma","φ20　表面　面取り":"φ20 Hyoumen Mentori","φ20ドリル　研磨":"φ20 Doriru Kenma","φ5ドリル":"φ5 Doriru","φ8　荒":"φ8 Ara","ドリル　研磨":"Doriru Kenma","ナライ荒":"Narai Ara","ボス仕上げ":"Bosu Shiage","ボス側　外径荒":"Bosu-gawa Gaikei Ara","モノV仕上げ":"Mono V Shiage","内径仕上げ":"Naikei Shiage","内径荒":"Naikei Ara","外径仕上げ":"Gaikei Shiage","外径荒":"Gaikei Ara","外径荒②":"Gaikei Ara②","幅・高さ":"Haba / Takasa","座面仕上げ":"Zamen Shiage","座面側　外径荒":"Zamen-gawa Gaikei Ara","溝荒":"Mizo Ara","研磨":"Kenma","穴仕上げ":"Ana Shiage","穴荒":"Ana Ara","端面　ツバ":"Tanmen Tsuba","端面仕上げ":"Tanmen Shiage","端面内径仕上げ":"Tanmen Naikei Shiage","端面荒":"Tanmen Ara","裏面　面取り":"Ura-men Mentori","識別溝":"Shikibetsu Mizo","面取り":"Mentori","８㎜幅":"8mm Haba","Ｖ仕上げ":"V Shiage"};
 const DEFECT_KAKOU_KEY = ["height","dakon","naikeiS","naikeiL","bariChip","mushireChip"];
 const DEFECT_KAKOU_TR = {
   height:    {ja:"高さ", id:"Tinggi", es:"Altura", pt:"Altura"},
@@ -978,6 +1002,19 @@ function fillSelect(id, values, withDash){
   if(withDash) el.appendChild(opt('－'));
   values.forEach(v=>el.appendChild(opt(v)));
 }
+// 切削部位専用：保存される値は漢字表記のまま（工程単価ツールのマスタと一致させるため）、
+// 画面表示だけ「漢字（ローマ字）」にする。
+function fillSelectSpot(id, withDash){
+  const el = document.getElementById(id); if(!el) return;
+  el.innerHTML = '';
+  if(withDash) el.appendChild(opt('－'));
+  SPOT_MASTER.forEach(v=>{
+    const o = document.createElement('option');
+    o.value = v;
+    o.textContent = SPOT_ROMAJI[v] ? (v + '（' + SPOT_ROMAJI[v] + '）') : v;
+    el.appendChild(o);
+  });
+}
 function fillRange(id, from, to, step, withDash){
   const el = document.getElementById(id); if(!el) return;
   el.innerHTML = '';
@@ -1061,6 +1098,97 @@ function buildStopRows(){
     });
   }
   applyTranslations();
+}
+
+// ---- 新規品目マスタ登録情報：工程ごとの使用刃物・刃具寿命・サイクルタイム（段取り日報） ----
+// このマスタ未登録ケース（isNewItemCase）のときだけ表示される。
+// 工程は主工程欄（process）を「+」で分解して自動的に決まる（「1 + 2 + マシニング」なら
+// 工程1=1・工程2=2・工程3=マシニングの3ブロック。選択の手間を無くすため、手入力はさせない）。
+// 単独工程のときは工程欄自体を隠し、ブロック1つだけで入力する。
+// 1つの工程で複数の刃物を使うことがあるため、各工程ブロック内で使用刃物は複数本・進行的に
+// 追加できる（1本目を入力すると2本目が現れる）。CTは工程につき1つだけ（刃物を追加しても
+// 再入力は不要）。
+const PROCESS_SLOT_COUNT = 4; // ライン一括時の最大工程数
+const BLADE_SLOT_COUNT = 8;   // 1工程あたりの最大使用刃物数
+// 「焼入れ後　3 + ブローチ」のような、見た目は「+」を含むが実際は単独工程として扱う
+// 固有名称（RATE_HELPERS.canonProcessのエイリアス）は分解しない。
+function splitProcessTokens(mainProc){
+  const raw = String(mainProc == null ? '' : mainProc);
+  if(/焼入れ/.test(raw)) return [raw.trim()];
+  if(!/[+＋]/.test(raw)) return [raw.trim()];
+  return raw.split(/[+＋]/).map(s=>s.trim()).filter(s=>s!=='');
+}
+function buildToolRows(){
+  const container = document.getElementById('newItemToolRowsContainer');
+  if(!container) return;
+  container.innerHTML = '';
+  for(let p=1;p<=PROCESS_SLOT_COUNT;p++){
+    const block = document.createElement('div');
+    block.className = 'tiProcessBlock';
+    block.id = 'tiProcessBlock'+p;
+    if(p>1) block.classList.add('hidden-row');
+    block.innerHTML = `
+      <div class="sheetrow">
+        <div class="rowlabel"><span class="main" id="tiProcLabel${p}">使用刃物・交換回数・CT</span></div>
+        <div class="rowfields">
+          <div class="fieldgroup narrow" id="tiProcWrap${p}"><span class="glabel">工程</span><input type="text" id="tiProc${p}" readonly></div>
+          <div class="fieldgroup ctbox"><span class="glabel">CT（秒/個）</span><input type="number" id="tiCt${p}" inputmode="decimal" placeholder="例：45.2"></div>
+        </div>
+      </div>
+      <div id="tiBladeRows${p}"></div>`;
+    container.appendChild(block);
+    const bladeWrap = block.querySelector('#tiBladeRows'+p);
+    for(let b=1;b<=BLADE_SLOT_COUNT;b++){
+      const row = document.createElement('div');
+      row.className = 'sheetrow tiBladeRow';
+      row.id = 'tiBladeRow'+p+'_'+b;
+      if(b>1) row.classList.add('hidden-row');
+      row.innerHTML = `
+        <div class="rowlabel"><span class="main">使用刃物</span><span class="sub">${b}本目</span></div>
+        <div class="rowfields">
+          <div class="fieldgroup"><span class="glabel">切削部位</span><select id="tiSpot${p}_${b}"></select></div>
+          <div class="fieldgroup"><span class="glabel">使用刃物</span><select id="tiBlade${p}_${b}"></select></div>
+          <div class="fieldgroup ctbox"><span class="glabel">交換回数</span><input type="number" id="tiLife${p}_${b}" inputmode="numeric" placeholder="例：200"></div>
+        </div>`;
+      bladeWrap.appendChild(row);
+    }
+  }
+  for(let p=1;p<=PROCESS_SLOT_COUNT;p++){
+    for(let b=1;b<=BLADE_SLOT_COUNT;b++){
+      fillSelectSpot('tiSpot'+p+'_'+b, true);
+      fillSelect('tiBlade'+p+'_'+b, BLADE_MASTER.map(x=>`${x.no}. ${x.name}（${x.maker||''}）`), true);
+    }
+  }
+  for(let p=1;p<=PROCESS_SLOT_COUNT;p++){
+    for(let b=1;b<BLADE_SLOT_COUNT;b++){
+      document.getElementById('tiBlade'+p+'_'+b).addEventListener('change', function(){
+        if(this.value !== '' && this.value !== '－') document.getElementById('tiBladeRow'+p+'_'+(b+1)).classList.remove('hidden-row');
+      });
+    }
+  }
+  updateToolMode();
+}
+// 主工程（process欄）を「+」で分解した工程数に応じて、工程ブロックの表示数・ラベル・
+// 工程欄の値（自動セット、手入力不要）を切り替える。単独工程の場合はブロック1つだけ、
+// 工程欄は非表示。
+function updateToolMode(){
+  const block1 = document.getElementById('tiProcessBlock1');
+  if(!block1) return;
+  const tokens = splitProcessTokens(fieldVal('process'));
+  const isBatch = tokens.length > 1;
+  for(let p=1;p<=PROCESS_SLOT_COUNT;p++){
+    const block = document.getElementById('tiProcessBlock'+p);
+    const wrap = document.getElementById('tiProcWrap'+p);
+    const label = document.getElementById('tiProcLabel'+p);
+    const procInput = document.getElementById('tiProc'+p);
+    if(wrap) wrap.style.display = isBatch ? '' : 'none';
+    if(label) label.textContent = isBatch ? ('工程'+p) : '使用刃物・交換回数・CT';
+    if(procInput) procInput.value = isBatch ? (tokens[p-1] || '') : '';
+    if(block){
+      if(p === 1 || (isBatch && p <= tokens.length)) block.classList.remove('hidden-row');
+      else block.classList.add('hidden-row');
+    }
+  }
 }
 
 // ---- CHIP交換時間（1回→2回→…5回） ----
@@ -1328,13 +1456,22 @@ const RATE_MASTER = {"breaks":[{"e":610,"name":"午前休憩","robot":false,"s":
     kazuEl.addEventListener('change', updateRateHint);
   }
   updateRateHint();
+  window.RATE_HELPERS = { canonPart: rateCanonPart, canonProcess: rateCanonProcess };
 })();
 
 buildChipTimeRow();
 buildDefectKakou();
 buildDefectSozai();
 buildOtherFuryou();
+buildToolRows();
 enableDirectInputForAll();
+
+// 新規品目マスタ登録チェック（段取り日報でマスタ未登録の組み合わせを検出）
+['lineNo','partNo','process'].forEach(id=>{
+  const el = document.getElementById(id);
+  if(el) el.addEventListener('change', checkNewItemRegistration);
+});
+checkNewItemRegistration();
 
 // 記入漏れ防止（数量/時間が入ったら内容欄・事象欄を黄色に）
 function watchPair(qtyId, contentId){
@@ -1480,6 +1617,62 @@ function fieldVal(id){
 function isBlank(v){
   return v === '' || v === undefined || v === null || v === '－';
 }
+// 段取り日報で、入力中のライン／品番／工程の組み合わせがライン編成マスタ（RATE_MASTER.lines）に
+// まだ存在しない「新規品目」かどうかを判定する。getVal は fieldVal（ライブDOM）でも
+// draft.fields[id]を参照する関数でも使えるようにしてある（buildReportData等と同じ流儀）。
+// 戻り値: { applicable: 新規登録欄が必要か, partExists: 品番自体は既存マスタにあるか }
+function isNewItemCase(getVal){
+  const lineRaw = getVal('lineNo'), partRaw = getVal('partNo'), procRaw = getVal('process');
+  if(isBlank(lineRaw) || isBlank(partRaw) || isBlank(procRaw)) return { applicable: false, partExists: false };
+  const RH = window.RATE_HELPERS || {};
+  const canonPart = RH.canonPart || (p => String(p == null ? '' : p).replace(/[（(][^）)]*[）)]\s*$/, '').trim());
+  const canonProcess = RH.canonProcess || (p => String(p == null ? '' : p).trim());
+  const line = parseFloat(lineRaw);
+  const part = canonPart(partRaw);
+  const proc = canonProcess(procRaw);
+  const lines = (typeof RATE_MASTER !== 'undefined' && RATE_MASTER.lines) || [];
+  const partExists = lines.some(l => l.part === part);
+  const comboExists = lines.some(l => isFinite(line) && Number(l.line) === line && l.part === part &&
+    (proc === 'ライン一括' ? l.include !== 'しない' : l.process === proc));
+  return { applicable: !(partExists && comboExists), partExists };
+}
+// 上記の判定結果に応じて、新規品目マスタ登録情報の入力欄の表示/非表示を切り替える
+// （段取り日報モードのときだけ対象）。
+function checkNewItemRegistration(){
+  const container = document.getElementById('newItemContainer');
+  if(!container) return;
+  if(reportMode !== 'setup'){ container.style.display = 'none'; return; }
+  const info = isNewItemCase(fieldVal);
+  if(!info.applicable){ container.style.display = 'none'; return; }
+  container.style.display = '';
+  if(window.updateToolMode) updateToolMode();
+}
+window.checkNewItemRegistration = checkNewItemRegistration;
+// 工程ごとの使用刃物・刃具寿命の入力内容を取得する。
+// 「ライン一括」の場合は工程ごとに複数行（入力済みの行のみ）、それ以外は1行（主工程に対して1件）として扱う。
+// getVal は buildReportData 等と同じ使い分け方をする（フォーム本体 or 一時保存のスナップショット）。
+function collectToolRows(getVal){
+  const tokens = splitProcessTokens(getVal('process'));
+  const isBatch = tokens.length > 1;
+  const processCount = isBatch ? Math.min(tokens.length, PROCESS_SLOT_COUNT) : 1;
+  const rows = [];
+  for(let p=1;p<=processCount;p++){
+    const processName = isBatch ? tokens[p-1] : getVal('process');
+    const ctV = getVal('tiCt'+p);
+    const ctFilled = isFilledValue('tiCt'+p, ctV);
+    const blades = [];
+    for(let b=1;b<=BLADE_SLOT_COUNT;b++){
+      const spotV = getVal('tiSpot'+p+'_'+b), bladeV = getVal('tiBlade'+p+'_'+b), lifeV = getVal('tiLife'+p+'_'+b);
+      const spotFilled = isFilledValue('tiSpot'+p+'_'+b, spotV);
+      const bladeFilled = isFilledValue('tiBlade'+p+'_'+b, bladeV);
+      const lifeFilled = isFilledValue('tiLife'+p+'_'+b, lifeV);
+      if(b > 1 && !spotFilled && !bladeFilled && !lifeFilled) break;
+      blades.push({ idx: b, spot: spotV, blade: bladeV, life: lifeV, spotFilled, bladeFilled, lifeFilled });
+    }
+    rows.push({ idx: p, process: processName, ct: ctV, ctFilled, blades });
+  }
+  return { isBatch, rows };
+}
 function confirmRow(labelText, value, missing){
   const safeVal = isBlank(value) ? t('confirmUnfilled') : value;
   return `<div class="confirm-row${missing ? ' missing' : ''}"><span class="k">${labelText}</span><span class="v">${safeVal}</span></div>`;
@@ -1543,6 +1736,27 @@ function buildConfirmScreen(){
   if(reportMode === 'setup'){
     html += `<div class="confirm-section-title">${t('setupLabelFull')}</div>`;
     html += qtyRow(t('setupLabelFull'), 'qtySetup');
+
+    const niInfo = isNewItemCase(fieldVal);
+    if(niInfo.applicable){
+      html += `<div class="confirm-section-title">新規品目マスタ登録情報</div>`;
+      const toolInfo = collectToolRows(fieldVal);
+      toolInfo.rows.forEach(procRow=>{
+        const procLabel = toolInfo.isBatch ? `工程${procRow.idx}（${procRow.process}）` : '使用刃物・交換回数・CT';
+        const ctMiss = !procRow.ctFilled;
+        if(ctMiss) missingLabels.push(`${procLabel}：CT`);
+        html += confirmRow(`${procLabel}：CT（秒/個）`, procRow.ctFilled ? procRow.ct : t('confirmUnfilled'), ctMiss);
+        procRow.blades.forEach(bladeRow=>{
+          const rowMiss = !bladeRow.spotFilled || !bladeRow.bladeFilled || !bladeRow.lifeFilled;
+          const bladeLabel = `${procLabel}：使用刃物${bladeRow.idx > 1 ? `（${bladeRow.idx}本目）` : ''}`;
+          if(rowMiss) missingLabels.push(bladeLabel);
+          const spotText = bladeRow.spotFilled ? bladeRow.spot : t('confirmUnfilled');
+          const bladeText = bladeRow.bladeFilled ? bladeRow.blade : t('confirmUnfilled');
+          const lifeText = bladeRow.lifeFilled ? bladeRow.life : t('confirmUnfilled');
+          html += confirmRow(bladeLabel, `${spotText} / ${bladeText} / 交換回数${lifeText}`, rowMiss);
+        });
+      });
+    }
 
     html += `<div class="confirm-section-title">${t('sozaiFuryouTitle')}</div>`;
     html += qtyRow(`${t('locShutan')}(A)`, 'qtyShutan');
@@ -1658,7 +1872,16 @@ function buildReportData(getVal, mode, shift){
         "内径/座面(B)": getVal('qtyNaikei'),
         "ボス部(C)": getVal('qtyBosubu'),
         "鋳肌面(E)": getVal('qtyImohada')
-      }
+      },
+      新規マスタ登録: (function(){
+        const info = isNewItemCase(getVal);
+        if(!info.applicable) return null;
+        return collectToolRows(getVal).rows.map(row=>({
+          工程: row.process,
+          CT秒: row.ct,
+          使用刃具: row.blades.map(b=>({ 切削部位: b.spot, 使用刃物: b.blade, 刃具寿命: b.life }))
+        }));
+      })()
     };
   } else {
     return {
@@ -1717,6 +1940,20 @@ function getMissingRequiredLabels(getVal, mode){
     missing.push(mode === 'setup' ? t('workTimeSetup') : t('workTime'));
   }
   if(isBlank(getVal('kazu'))) missing.push(t('kazu'));
+
+  if(mode === 'setup'){
+    const info = isNewItemCase(getVal);
+    if(info.applicable){
+      const toolInfo = collectToolRows(getVal);
+      toolInfo.rows.forEach(procRow=>{
+        const procLabel = toolInfo.isBatch ? `工程${procRow.idx}（${procRow.process}）` : '使用刃物・交換回数・CT';
+        if(!procRow.ctFilled) missing.push(`${procLabel}：CT`);
+        procRow.blades.forEach(bladeRow=>{
+          if(!bladeRow.spotFilled || !bladeRow.bladeFilled || !bladeRow.lifeFilled) missing.push(`${procLabel}：使用刃物${bladeRow.idx > 1 ? `（${bladeRow.idx}本目）` : ''}`);
+        });
+      });
+    }
+  }
 
   function pairMissing(label, idA, idB){
     const aFilled = isFilledValue(idA, getVal(idA));
@@ -1783,7 +2020,10 @@ function resetForm(){
   document.querySelectorAll('.chipTimeGroup').forEach((el,idx)=>{ if(idx>0) el.classList.add('hidden-row'); });
   document.querySelectorAll('.defectPair').forEach((el)=>{ if(!el.id.endsWith('Pair1')) el.classList.add('hidden-row'); });
   document.querySelectorAll('.otherFuryouRow').forEach((el,idx)=>{ if(idx>0) el.classList.add('hidden-row'); });
+  document.querySelectorAll('.tiProcessBlock').forEach((el,idx)=>{ if(idx>0) el.classList.add('hidden-row'); });
+  document.querySelectorAll('.tiBladeRow').forEach((el)=>{ if(!el.id.endsWith('_1')) el.classList.add('hidden-row'); });
   if(window.updateRateHint) updateRateHint();
+  if(window.checkNewItemRegistration) checkNewItemRegistration();
 }
 
 // 送信後、同じ作業者がそのまま次のラインの日報入力に移れるようにする
@@ -2225,6 +2465,33 @@ function rawPayloadToFields(raw){
     const m = /^(\d{1,2}):(\d{2})\s*[〜~]\s*(\d{1,2}):(\d{2})$/.exec(raw.稼働時間_段取り時間 || '');
     if(m){ sv('startH', m[1]); sv('startM', m[2]); sv('endH', m[3]); sv('endM', m[4]); }
     sv('qtySetup', raw.段取り不良数);
+    // 新規マスタ登録：現行は工程ごとの配列で、各工程が複数の使用刃具を持てる
+    // （[{工程,CT秒,使用刃具:[{切削部位,使用刃物,刃具寿命}, ...]}, ...]）。
+    // 過去形式（本日中に変遷したもの。切削部位キーは無い）も後方互換で読み込む：
+    //   旧形式A: [{工程,CT秒,使用刃具:[{使用刃物,刃具寿命}, ...]}, ...]（切削部位なし）
+    //   旧形式B: [{工程,使用刃物,刃具寿命,CT秒}, ...]（工程ごとだが刃物は1本のみ）
+    //   旧形式C: {CT秒} 単体＋別キーの使用刃具情報/工程別刃具情報（工程の概念なし）
+    // 工程欄（tiProc）は入力欄ではなく主工程欄から自動算出されるため、ここでは復元しない。
+    const ni = raw.新規マスタ登録;
+    let niRows = [];
+    if(Array.isArray(ni)){
+      niRows = ni.map(r=>{
+        if(r && Array.isArray(r.使用刃具)) return r;
+        return { CT秒: r && r.CT秒, 使用刃具: [{ 切削部位: r && r.切削部位, 使用刃物: r && r.使用刃物, 刃具寿命: r && r.刃具寿命 }] };
+      });
+    } else if(ni){
+      niRows = [{ CT秒: ni.CT秒, 使用刃具: (raw.使用刃具情報 || raw.工程別刃具情報 || []).map(r=>({ 切削部位: r && r.切削部位, 使用刃物: r && r.使用刃物, 刃具寿命: r && r.刃具寿命 })) }];
+    }
+    niRows.forEach((row,p)=>{
+      if(!row) return;
+      sv('tiCt'+(p+1), row.CT秒);
+      (row.使用刃具||[]).forEach((b,bi)=>{
+        if(!b) return;
+        sv('tiSpot'+(p+1)+'_'+(bi+1), b.切削部位);
+        sv('tiBlade'+(p+1)+'_'+(bi+1), b.使用刃物);
+        sv('tiLife'+(p+1)+'_'+(bi+1), b.刃具寿命);
+      });
+    });
   } else {
     sv('helpName', raw.応援をした作業員の名前);
     sv('helpTime', raw.応援をした時間分);
